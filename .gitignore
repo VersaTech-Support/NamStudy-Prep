@@ -9,12 +9,8 @@ npm-debug.*
 *.mobileprovision
 *.orig.*
 web-build/
-assets/
 metro-cache/
 .metro-cache-*/
-
-
-
 
 ios
 android
