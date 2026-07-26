@@ -1,0 +1,379 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Platform,
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
+import { useUser } from '@/app/context/UserContext';
+import { supabase } from '@/app/lib/supabase';
+import TopicCard from '@/app/components/TopicCard';
+import UpgradeModal from '@/app/components/UpgradeModal';
+import AuthModal from '@/app/components/AuthModal';
+
+interface TopicSummary {
+  topicName: string;
+  questionCount: number;
+  gradeLevel: string;
+}
+
+export default function QuizzesScreen() {
+  const { user, isVIP } = useUser();
+  const router = useRouter();
+  const [topics, setTopics] = useState<TopicSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [gradeFilter, setGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS'>('All');
+  const [upgradeVisible, setUpgradeVisible] = useState(false);
+  const [authVisible, setAuthVisible] = useState(false);
+  const [freeAttempts, setFreeAttempts] = useState<Record<string, number>>({});
+
+  useEffect(() => {
+    fetchTopics();
+  }, []);
+
+  const fetchTopics = async () => {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from('quizzes')
+      .select('topic_name, grade_level');
+    
+    if (data) {
+      const topicMap: Record<string, TopicSummary> = {};
+      data.forEach((q: any) => {
+        const key = `${q.topic_name}-${q.grade_level}`;
+        if (!topicMap[key]) {
+          topicMap[key] = {
+            topicName: q.topic_name,
+            questionCount: 0,
+            gradeLevel: q.grade_level,
+          };
+        }
+        topicMap[key].questionCount++;
+      });
+      setTopics(Object.values(topicMap));
+    }
+    setLoading(false);
+  };
+
+  const filteredTopics = topics.filter(t => {
+    if (gradeFilter !== 'All' && t.gradeLevel !== gradeFilter) return false;
+    return true;
+  });
+
+  const handleTopicPress = (topic: TopicSummary) => {
+    if (!user) {
+      setAuthVisible(true);
+      return;
+    }
+
+    const key = `${topic.topicName}-${topic.gradeLevel}`;
+    const attemptsLeft = freeAttempts[key] ?? 3;
+
+    if (!isVIP && attemptsLeft <= 0) {
+      setUpgradeVisible(true);
+      return;
+    }
+
+    // Decrement free attempts for non-VIP users
+    if (!isVIP) {
+      setFreeAttempts(prev => ({
+        ...prev,
+        [key]: (prev[key] ?? 3) - 1,
+      }));
+    }
+
+    router.push({
+      pathname: '/quiz/[topic]',
+      params: { 
+        topic: topic.topicName, 
+        gradeLevel: topic.gradeLevel 
+      },
+    });
+  };
+
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Topic Quizzes</Text>
+        <Text style={styles.headerSubtitle}>
+          Test your knowledge across all topics
+        </Text>
+      </View>
+
+      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
+        {/* Grade Filter */}
+        <View style={styles.filterContainer}>
+          {(['All', 'NSSCO', 'NSSCAS'] as const).map(grade => (
+            <TouchableOpacity
+              key={grade}
+              style={[styles.filterTab, gradeFilter === grade && styles.filterTabActive]}
+              onPress={() => setGradeFilter(grade)}
+            >
+              <Text style={[styles.filterTabText, gradeFilter === grade && styles.filterTabTextActive]}>
+                {grade === 'All' ? 'All' : grade}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Info Banner */}
+        {!isVIP && (
+          <View style={styles.infoBanner}>
+            <Ionicons name="information-circle" size={20} color={COLORS.accent} />
+            <View style={styles.infoBannerContent}>
+              <Text style={styles.infoBannerTitle}>Free users: 3 attempts per topic</Text>
+              <Text style={styles.infoBannerText}>Upgrade to VIP for unlimited quizzes</Text>
+            </View>
+            <TouchableOpacity 
+              style={styles.infoBannerBtn}
+              onPress={() => setUpgradeVisible(true)}
+            >
+              <Text style={styles.infoBannerBtnText}>Upgrade</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {isVIP && (
+          <View style={styles.vipBanner}>
+            <Ionicons name="diamond" size={20} color={COLORS.gold} />
+            <Text style={styles.vipBannerText}>VIP Active - Unlimited Quizzes</Text>
+          </View>
+        )}
+
+        {/* Topics Grid */}
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading topics...</Text>
+          </View>
+        ) : (
+          <View style={styles.topicsGrid}>
+            {filteredTopics.map((topic, i) => {
+              const key = `${topic.topicName}-${topic.gradeLevel}`;
+              return (
+                <TopicCard
+                  key={key}
+                  topicName={topic.topicName}
+                  questionCount={topic.questionCount}
+                  gradeLevel={topic.gradeLevel}
+                  isVIP={isVIP}
+                  freeAttemptsLeft={freeAttempts[key] ?? 3}
+                  onPress={() => handleTopicPress(topic)}
+                />
+              );
+            })}
+          </View>
+        )}
+
+        {/* How It Works */}
+        <View style={styles.howItWorks}>
+          <Text style={styles.howTitle}>How Quizzes Work</Text>
+          <View style={styles.howStep}>
+            <View style={[styles.howStepNum, { backgroundColor: COLORS.primary + '15' }]}>
+              <Text style={[styles.howStepNumText, { color: COLORS.primary }]}>1</Text>
+            </View>
+            <View style={styles.howStepContent}>
+              <Text style={styles.howStepTitle}>Choose a Topic</Text>
+              <Text style={styles.howStepText}>Select from Algebra, Geometry, Calculus and more</Text>
+            </View>
+          </View>
+          <View style={styles.howStep}>
+            <View style={[styles.howStepNum, { backgroundColor: COLORS.accent + '15' }]}>
+              <Text style={[styles.howStepNumText, { color: COLORS.accent }]}>2</Text>
+            </View>
+            <View style={styles.howStepContent}>
+              <Text style={styles.howStepTitle}>Answer Questions</Text>
+              <Text style={styles.howStepText}>Multiple choice questions with instant feedback</Text>
+            </View>
+          </View>
+          <View style={styles.howStep}>
+            <View style={[styles.howStepNum, { backgroundColor: COLORS.green + '15' }]}>
+              <Text style={[styles.howStepNumText, { color: COLORS.green }]}>3</Text>
+            </View>
+            <View style={styles.howStepContent}>
+              <Text style={styles.howStepTitle}>Learn from Explanations</Text>
+              <Text style={styles.howStepText}>Detailed explanations for every answer</Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={{ height: 40 }} />
+      </ScrollView>
+
+      <UpgradeModal visible={upgradeVisible} onClose={() => setUpgradeVisible(false)} />
+      <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    backgroundColor: COLORS.primary,
+    paddingTop: Platform.OS === 'ios' ? 56 : 40,
+    paddingBottom: SPACING.xl,
+    paddingHorizontal: SPACING.xl,
+  },
+  headerTitle: {
+    ...FONTS.h1,
+    color: COLORS.white,
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    ...FONTS.caption,
+    color: 'rgba(255,255,255,0.7)',
+  },
+  scrollView: {
+    flex: 1,
+  },
+  // Filters
+  filterContainer: {
+    flexDirection: 'row',
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
+    gap: SPACING.sm,
+  },
+  filterTab: {
+    flex: 1,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  filterTabActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterTabText: {
+    ...FONTS.caption,
+    color: COLORS.textSecondary,
+  },
+  filterTabTextActive: {
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  // Banners
+  infoBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#DBEAFE',
+    marginHorizontal: SPACING.xl,
+    marginTop: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    gap: SPACING.sm,
+  },
+  infoBannerContent: {
+    flex: 1,
+  },
+  infoBannerTitle: {
+    ...FONTS.caption,
+    color: COLORS.accent,
+    fontWeight: '700',
+  },
+  infoBannerText: {
+    ...FONTS.small,
+    color: COLORS.accent,
+  },
+  infoBannerBtn: {
+    backgroundColor: COLORS.gold,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 6,
+    borderRadius: RADIUS.sm,
+  },
+  infoBannerBtnText: {
+    ...FONTS.small,
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+  vipBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.goldLight,
+    marginHorizontal: SPACING.xl,
+    marginTop: SPACING.lg,
+    padding: SPACING.md,
+    borderRadius: RADIUS.md,
+    gap: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.gold + '30',
+  },
+  vipBannerText: {
+    ...FONTS.caption,
+    color: COLORS.goldDark,
+    fontWeight: '700',
+  },
+  // Topics Grid
+  topicsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: SPACING.xl,
+    paddingTop: SPACING.lg,
+  },
+  // Loading
+  loadingContainer: {
+    alignItems: 'center',
+    paddingVertical: 60,
+  },
+  loadingText: {
+    ...FONTS.caption,
+    color: COLORS.textMuted,
+    marginTop: SPACING.md,
+  },
+  // How It Works
+  howItWorks: {
+    marginHorizontal: SPACING.xl,
+    marginTop: SPACING.xxxl,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    ...SHADOWS.sm,
+  },
+  howTitle: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.lg,
+  },
+  howStep: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.lg,
+  },
+  howStepNum: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: SPACING.md,
+  },
+  howStepNumText: {
+    ...FONTS.bodyBold,
+    fontWeight: '800',
+  },
+  howStepContent: {
+    flex: 1,
+  },
+  howStepTitle: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  howStepText: {
+    ...FONTS.small,
+    color: COLORS.textSecondary,
+  },
+});
