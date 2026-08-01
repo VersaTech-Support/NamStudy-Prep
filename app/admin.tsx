@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
 import { useUser } from '@/app/context/UserContext';
 import { supabase } from '@/app/lib/supabase';
@@ -60,10 +61,11 @@ export default function AdminScreen() {
   const [papers, setPapers] = useState<Paper[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
+  const [quizCount, setQuizCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
-  // Paper form
+  // Paper form states
   const [showPaperForm, setShowPaperForm] = useState(false);
   const [paperTitle, setPaperTitle] = useState('');
   const [paperYear, setPaperYear] = useState('2024');
@@ -73,9 +75,11 @@ export default function AdminScreen() {
   const [solutionUrl, setSolutionUrl] = useState('');
   const [paperDesc, setPaperDesc] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploadingPaper, setUploadingPaper] = useState(false);
+  const [uploadingSolution, setUploadingSolution] = useState(false);
   const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
 
-  // Quiz form
+  // Quiz form states
   const [showQuizForm, setShowQuizForm] = useState(false);
   const [quizTopic, setQuizTopic] = useState('');
   const [quizQuestion, setQuizQuestion] = useState('');
@@ -88,7 +92,7 @@ export default function AdminScreen() {
   const [quizGrade, setQuizGrade] = useState<'NSSCO' | 'NSSCAS'>('NSSCO');
   const [quizDifficulty, setQuizDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
 
-  // Reject note modal
+  // Reject modal states
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
@@ -104,23 +108,66 @@ export default function AdminScreen() {
 
   const fetchData = async () => {
     setLoading(true);
-    const [papersRes, usersRes] = await Promise.all([
+    const [papersRes, usersRes, quizzesRes, paymentsRes] = await Promise.all([
       supabase.from('papers').select('*').order('year', { ascending: false }),
       supabase.from('users').select('*').order('created_at', { ascending: false }),
+      supabase.from('quizzes').select('*', { count: 'exact', head: true }),
+      supabase.from('payments').select('*, users(name, email, grade_level)').order('created_at', { ascending: false }),
     ]);
+
     if (papersRes.data) setPapers(papersRes.data);
     if (usersRes.data) setUsers(usersRes.data);
-
-    // Fetch payments via direct Supabase call
-    try {
-      const { data } = await supabase
-        .from('payments')
-        .select('*, users(name, email, grade_level)')
-        .order('created_at', { ascending: false });
-      if (data) setPayments(data as any);
-    } catch {}
+    if (quizzesRes.count !== null) setQuizCount(quizzesRes.count);
+    if (paymentsRes.data) setPayments(paymentsRes.data as any);
 
     setLoading(false);
+  };
+
+  // Easy Document Picker & Upload helper
+  const handlePickAndUploadPDF = async (type: 'paper' | 'solution') => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets || result.assets.length === 0) return;
+
+      const file = result.assets[0];
+      if (type === 'paper') setUploadingPaper(true);
+      else setUploadingSolution(true);
+
+      const fileExt = file.name.split('.').pop() || 'pdf';
+      const fileName = `${paperGrade}_${paperYear}_P${paperNumber}_${Date.now()}.${fileExt}`;
+      const bucket = type === 'paper' ? 'papers' : 'solutions';
+
+      const response = await fetch(file.uri);
+      const arrayBuffer = await response.arrayBuffer();
+
+      const { error: uploadError } = await supabase.storage
+        .from(bucket)
+        .upload(fileName, arrayBuffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from(bucket).getPublicUrl(fileName);
+
+      if (type === 'paper') {
+        setPaperUrl(data.publicUrl);
+        Alert.alert('Success', 'Paper PDF uploaded successfully!');
+      } else {
+        setSolutionUrl(data.publicUrl);
+        Alert.alert('Success', 'Solution PDF uploaded successfully!');
+      }
+    } catch (error: any) {
+      Alert.alert('Upload Error', error.message || 'Failed to upload document.');
+    } finally {
+      setUploadingPaper(false);
+      setUploadingSolution(false);
+    }
   };
 
   const handleApprovePayment = async (paymentId: string) => {
@@ -140,7 +187,6 @@ export default function AdminScreen() {
                 .eq('id', paymentId);
 
               if (!error) {
-                // Also update user subscription status
                 const p = payments.find(pay => pay.id === paymentId);
                 if (p?.user_id) {
                   const expiry = new Date();
@@ -203,34 +249,22 @@ export default function AdminScreen() {
     setEditingPaperId(null);
   };
 
-  const resetQuizForm = () => {
-    setQuizTopic('');
-    setQuizQuestion('');
-    setQuizA('');
-    setQuizB('');
-    setQuizC('');
-    setQuizD('');
-    setQuizCorrect('A');
-    setQuizExplanation('');
-    setQuizGrade('NSSCO');
-    setQuizDifficulty('Medium');
-  };
-
   const handleSavePaper = async () => {
     if (!paperTitle || !paperUrl) {
-      Alert.alert('Error', 'Please fill in the title and paper PDF URL.');
+      Alert.alert('Error', 'Please fill in the title and provide a paper PDF URL.');
       return;
     }
     setSaving(true);
     const paperData = {
       title: paperTitle,
-      year: parseInt(paperYear),
-      paper_number: parseInt(paperNumber),
+      year: parseInt(paperYear) || 2024,
+      paper_number: parseInt(paperNumber) || 1,
       grade_level: paperGrade,
       paper_pdf_url: paperUrl,
       solution_pdf_url: solutionUrl || null,
-      description: paperDesc,
+      description: paperDesc || `${paperGrade} Mathematics Exam Paper`,
     };
+
     if (editingPaperId) {
       const { error } = await supabase.from('papers').update(paperData).eq('id', editingPaperId);
       if (error) Alert.alert('Error', 'Failed to update paper.');
@@ -262,7 +296,7 @@ export default function AdminScreen() {
     else Alert.alert('Success', 'Quiz question added!');
     setSaving(false);
     setShowQuizForm(false);
-    resetQuizForm();
+    fetchData();
   };
 
   const handleEditPaper = (paper: Paper) => {
@@ -298,7 +332,6 @@ export default function AdminScreen() {
 
   const pendingPayments = payments.filter(p => p.status === 'pending');
   const processedPayments = payments.filter(p => p.status !== 'pending');
-
   const totalRevenue = payments.filter(p => p.status === 'approved').reduce((sum, p) => sum + p.amount, 0);
 
   if (!isAdmin) return null;
@@ -349,10 +382,28 @@ export default function AdminScreen() {
         </View>
       ) : (
         <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
+          {/* CONTENT STATS BAR */}
+          <View style={styles.statsOverviewRow}>
+            <View style={styles.overviewCard}>
+              <Ionicons name="document-text" size={20} color={COLORS.green} />
+              <Text style={styles.overviewNum}>{papers.length}</Text>
+              <Text style={styles.overviewLabel}>Total Papers</Text>
+            </View>
+            <View style={styles.overviewCard}>
+              <Ionicons name="help-circle" size={20} color={COLORS.accent} />
+              <Text style={styles.overviewNum}>{quizCount}</Text>
+              <Text style={styles.overviewLabel}>Quiz Questions</Text>
+            </View>
+            <View style={styles.overviewCard}>
+              <Ionicons name="people" size={20} color={COLORS.primary} />
+              <Text style={styles.overviewNum}>{users.length}</Text>
+              <Text style={styles.overviewLabel}>Registered Users</Text>
+            </View>
+          </View>
+
           {/* PAYMENTS TAB */}
           {activeTab === 'payments' && (
             <View style={styles.tabContent}>
-              {/* Revenue Stats */}
               <View style={styles.revenueRow}>
                 <View style={[styles.revCard, { backgroundColor: COLORS.gold + '10', borderColor: COLORS.gold + '30' }]}>
                   <Ionicons name="time" size={20} color={COLORS.gold} />
@@ -371,7 +422,6 @@ export default function AdminScreen() {
                 </View>
               </View>
 
-              {/* Pending Payments */}
               {pendingPayments.length > 0 && (
                 <View style={styles.paymentSection}>
                   <View style={styles.paymentSectionHeader}>
@@ -404,13 +454,6 @@ export default function AdminScreen() {
                           <Ionicons name="time" size={12} color={COLORS.textMuted} />
                           <Text style={styles.paymentMetaText}>{formatDate(p.created_at)}</Text>
                         </View>
-                        {p.users?.grade_level && (
-                          <View style={[styles.paymentGradeBadge, { backgroundColor: p.users.grade_level === 'NSSCO' ? COLORS.greenLight : COLORS.goldLight }]}>
-                            <Text style={[styles.paymentGradeText, { color: p.users.grade_level === 'NSSCO' ? COLORS.greenDark : COLORS.goldDark }]}>
-                              {p.users.grade_level}
-                            </Text>
-                          </View>
-                        )}
                       </View>
 
                       <View style={styles.paymentActions}>
@@ -418,7 +461,6 @@ export default function AdminScreen() {
                           style={styles.approveBtn}
                           onPress={() => handleApprovePayment(p.id)}
                           disabled={processingId === p.id}
-                          activeOpacity={0.7}
                         >
                           {processingId === p.id ? (
                             <ActivityIndicator size="small" color={COLORS.white} />
@@ -433,7 +475,6 @@ export default function AdminScreen() {
                           style={styles.rejectBtn}
                           onPress={() => { setRejectPaymentId(p.id); setShowRejectModal(true); }}
                           disabled={processingId === p.id}
-                          activeOpacity={0.7}
                         >
                           <Ionicons name="close-circle" size={18} color={COLORS.red} />
                           <Text style={styles.rejectBtnText}>Reject</Text>
@@ -452,7 +493,6 @@ export default function AdminScreen() {
                 </View>
               )}
 
-              {/* Processed Payments */}
               {processedPayments.length > 0 && (
                 <View style={styles.paymentSection}>
                   <Text style={styles.paymentSectionTitle}>Payment History</Text>
@@ -472,12 +512,6 @@ export default function AdminScreen() {
                       <View style={styles.paymentCardMeta}>
                         <Text style={styles.paymentMetaText}>N${p.amount.toFixed(2)} - {formatDate(p.created_at)}</Text>
                       </View>
-                      {p.admin_note && (
-                        <View style={styles.adminNoteRow}>
-                          <Ionicons name="chatbubble" size={11} color={COLORS.textMuted} />
-                          <Text style={styles.adminNoteText}>{p.admin_note}</Text>
-                        </View>
-                      )}
                     </View>
                   ))}
                 </View>
@@ -508,18 +542,6 @@ export default function AdminScreen() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                  <View style={styles.adminCardMeta}>
-                    <View style={styles.metaItem}>
-                      <Ionicons name="document" size={12} color={COLORS.green} />
-                      <Text style={[styles.metaText, { color: COLORS.green }]}>Paper PDF</Text>
-                    </View>
-                    <View style={styles.metaItem}>
-                      <Ionicons name={paper.solution_pdf_url ? 'key' : 'close-circle'} size={12} color={paper.solution_pdf_url ? COLORS.gold : COLORS.red} />
-                      <Text style={[styles.metaText, { color: paper.solution_pdf_url ? COLORS.gold : COLORS.red }]}>
-                        {paper.solution_pdf_url ? 'Solution PDF' : 'No Solution'}
-                      </Text>
-                    </View>
-                  </View>
                 </View>
               ))}
             </View>
@@ -528,20 +550,6 @@ export default function AdminScreen() {
           {/* USERS TAB */}
           {activeTab === 'users' && (
             <View style={styles.tabContent}>
-              <View style={styles.statsRow}>
-                <View style={[styles.statCard, { backgroundColor: COLORS.primary + '10' }]}>
-                  <Text style={[styles.statNum, { color: COLORS.primary }]}>{users.length}</Text>
-                  <Text style={styles.statLabel}>Total</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: COLORS.gold + '10' }]}>
-                  <Text style={[styles.statNum, { color: COLORS.gold }]}>{users.filter(u => u.subscription_status === 'VIP').length}</Text>
-                  <Text style={styles.statLabel}>VIP</Text>
-                </View>
-                <View style={[styles.statCard, { backgroundColor: COLORS.green + '10' }]}>
-                  <Text style={[styles.statNum, { color: COLORS.green }]}>{users.filter(u => u.subscription_status === 'Free').length}</Text>
-                  <Text style={styles.statLabel}>Free</Text>
-                </View>
-              </View>
               {users.map(u => (
                 <View key={u.id} style={styles.adminCard}>
                   <View style={styles.userRow}>
@@ -551,14 +559,6 @@ export default function AdminScreen() {
                     <View style={styles.userInfo}>
                       <Text style={styles.adminCardTitle}>{u.name}</Text>
                       <Text style={styles.adminCardSub}>{u.email}</Text>
-                      <View style={styles.userTags}>
-                        <View style={[styles.userTag, { backgroundColor: u.grade_level === 'NSSCO' ? COLORS.greenLight : COLORS.goldLight }]}>
-                          <Text style={[styles.userTagText, { color: u.grade_level === 'NSSCO' ? COLORS.greenDark : COLORS.goldDark }]}>{u.grade_level}</Text>
-                        </View>
-                        <View style={[styles.userTag, { backgroundColor: u.subscription_status === 'VIP' ? COLORS.goldLight : COLORS.surfaceAlt }]}>
-                          <Text style={[styles.userTagText, { color: u.subscription_status === 'VIP' ? COLORS.goldDark : COLORS.textMuted }]}>{u.subscription_status}</Text>
-                        </View>
-                      </View>
                     </View>
                   </View>
                 </View>
@@ -569,11 +569,11 @@ export default function AdminScreen() {
           {/* QUIZZES TAB */}
           {activeTab === 'quizzes' && (
             <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.addBtn} onPress={() => { resetQuizForm(); setShowQuizForm(true); }}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowQuizForm(true)}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Add Quiz Question</Text>
               </TouchableOpacity>
-              <Text style={styles.infoText}>Manage quiz questions from the database. Use the button above to add new questions.</Text>
+              <Text style={styles.infoText}>Manage quiz questions from the database.</Text>
             </View>
           )}
 
@@ -581,35 +581,7 @@ export default function AdminScreen() {
         </ScrollView>
       )}
 
-      {/* Reject Note Modal */}
-      <Modal visible={showRejectModal} transparent animationType="fade">
-        <View style={styles.rejectOverlay}>
-          <View style={styles.rejectContainer}>
-            <Text style={styles.rejectTitle}>Reject Payment</Text>
-            <Text style={styles.rejectSubtitle}>Optionally add a note for the student:</Text>
-            <TextInput
-              style={styles.rejectInput}
-              placeholder="e.g., Payment not found in bank records..."
-              placeholderTextColor={COLORS.textMuted}
-              value={rejectNote}
-              onChangeText={setRejectNote}
-              multiline
-            />
-            <View style={styles.rejectActions}>
-              <TouchableOpacity style={styles.rejectCancelBtn} onPress={() => { setShowRejectModal(false); setRejectNote(''); }}>
-                <Text style={styles.rejectCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.rejectConfirmBtn} onPress={handleRejectPayment}>
-                {processingId ? <ActivityIndicator size="small" color={COLORS.white} /> : (
-                  <Text style={styles.rejectConfirmText}>Reject Payment</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      {/* Paper Form Modal */}
+      {/* PAPER FORM MODAL WITH EASY UPLOAD BUTTONS */}
       <Modal visible={showPaperForm} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -620,8 +592,10 @@ export default function AdminScreen() {
                   <Ionicons name="close" size={24} color={COLORS.textSecondary} />
                 </TouchableOpacity>
               </View>
+
               <Text style={styles.formLabel}>Paper Title *</Text>
               <TextInput style={styles.formInput} placeholder="e.g., Nov 2024 Paper 1" placeholderTextColor={COLORS.textMuted} value={paperTitle} onChangeText={setPaperTitle} />
+
               <View style={styles.formRow}>
                 <View style={styles.formHalf}>
                   <Text style={styles.formLabel}>Year *</Text>
@@ -632,6 +606,7 @@ export default function AdminScreen() {
                   <TextInput style={styles.formInput} placeholder="1" placeholderTextColor={COLORS.textMuted} value={paperNumber} onChangeText={setPaperNumber} keyboardType="numeric" />
                 </View>
               </View>
+
               <Text style={styles.formLabel}>Grade Level *</Text>
               <View style={styles.formGradeRow}>
                 {(['NSSCO', 'NSSCAS'] as const).map(g => (
@@ -640,20 +615,38 @@ export default function AdminScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.formLabel}>Exam Paper PDF URL *</Text>
-              <TextInput style={styles.formInput} placeholder="https://..." placeholderTextColor={COLORS.textMuted} value={paperUrl} onChangeText={setPaperUrl} autoCapitalize="none" />
-              <View style={styles.formHint}>
-                <Ionicons name="information-circle" size={14} color={COLORS.green} />
-                <Text style={styles.formHintText}>This is the FREE paper download link</Text>
-              </View>
-              <Text style={styles.formLabel}>Solution PDF URL (Premium)</Text>
-              <TextInput style={styles.formInput} placeholder="https://..." placeholderTextColor={COLORS.textMuted} value={solutionUrl} onChangeText={setSolutionUrl} autoCapitalize="none" />
-              <View style={styles.formHint}>
-                <Ionicons name="diamond" size={14} color={COLORS.gold} />
-                <Text style={[styles.formHintText, { color: COLORS.goldDark }]}>This is the VIP-only solution link</Text>
-              </View>
+
+              {/* EASY UPLOAD BUTTON FOR FREE PAPER PDF */}
+              <Text style={styles.formLabel}>Exam Paper PDF (Free) *</Text>
+              <TouchableOpacity style={styles.uploadPickerBtn} onPress={() => handlePickAndUploadPDF('paper')} disabled={uploadingPaper}>
+                {uploadingPaper ? (
+                  <ActivityIndicator color={COLORS.primary} />
+                ) : (
+                  <>
+                    <Ionicons name="cloud-upload" size={18} color={COLORS.primary} />
+                    <Text style={styles.uploadPickerBtnText}>{paperUrl ? 'Change Paper PDF File' : 'Select & Upload Paper PDF'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {paperUrl ? <Text style={styles.successUrlText} numberOfLines={1}>✓ File Uploaded Successfully</Text> : null}
+
+              {/* EASY UPLOAD BUTTON FOR SOLUTION PDF */}
+              <Text style={styles.formLabel}>Solution PDF (VIP Golden Memos)</Text>
+              <TouchableOpacity style={styles.uploadPickerBtn} onPress={() => handlePickAndUploadPDF('solution')} disabled={uploadingSolution}>
+                {uploadingSolution ? (
+                  <ActivityIndicator color={COLORS.gold} />
+                ) : (
+                  <>
+                    <Ionicons name="key" size={18} color={COLORS.gold} />
+                    <Text style={[styles.uploadPickerBtnText, { color: COLORS.goldDark }]}>{solutionUrl ? 'Change Solution PDF File' : 'Select & Upload Solution PDF'}</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              {solutionUrl ? <Text style={styles.successUrlText} numberOfLines={1}>✓ Solution Uploaded Successfully</Text> : null}
+
               <Text style={styles.formLabel}>Description</Text>
               <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]} placeholder="Brief description..." placeholderTextColor={COLORS.textMuted} value={paperDesc} onChangeText={setPaperDesc} multiline />
+
               <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={handleSavePaper} disabled={saving}>
                 {saving ? <ActivityIndicator color={COLORS.white} /> : (
                   <><Ionicons name="checkmark-circle" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>{editingPaperId ? 'Update Paper' : 'Save Paper'}</Text></>
@@ -664,7 +657,7 @@ export default function AdminScreen() {
         </View>
       </Modal>
 
-      {/* Quiz Form Modal */}
+      {/* QUIZ FORM MODAL */}
       <Modal visible={showQuizForm} transparent animationType="slide">
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -695,24 +688,6 @@ export default function AdminScreen() {
                   </TouchableOpacity>
                 ))}
               </View>
-              <Text style={styles.formLabel}>Grade Level *</Text>
-              <View style={styles.formGradeRow}>
-                {(['NSSCO', 'NSSCAS'] as const).map(g => (
-                  <TouchableOpacity key={g} style={[styles.formGradeBtn, quizGrade === g && styles.formGradeBtnActive]} onPress={() => setQuizGrade(g)}>
-                    <Text style={[styles.formGradeBtnText, quizGrade === g && styles.formGradeBtnTextActive]}>{g}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={styles.formLabel}>Difficulty *</Text>
-              <View style={styles.formGradeRow}>
-                {(['Easy', 'Medium', 'Hard'] as const).map(d => (
-                  <TouchableOpacity key={d} style={[styles.formGradeBtn, quizDifficulty === d && styles.formGradeBtnActive]} onPress={() => setQuizDifficulty(d)}>
-                    <Text style={[styles.formGradeBtnText, quizDifficulty === d && styles.formGradeBtnTextActive]}>{d}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-              <Text style={styles.formLabel}>Explanation</Text>
-              <TextInput style={[styles.formInput, { height: 80, textAlignVertical: 'top' }]} placeholder="Step-by-step explanation..." placeholderTextColor={COLORS.textMuted} value={quizExplanation} onChangeText={setQuizExplanation} multiline />
               <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={handleSaveQuiz} disabled={saving}>
                 {saving ? <ActivityIndicator color={COLORS.white} /> : (
                   <><Ionicons name="checkmark-circle" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Save Question</Text></>
@@ -743,12 +718,14 @@ const styles = StyleSheet.create({
   scrollView: { flex: 1 },
   tabContent: { padding: SPACING.xl },
   loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  // Revenue
+  statsOverviewRow: { flexDirection: 'row', gap: SPACING.sm, padding: SPACING.xl, paddingBottom: 0 },
+  overviewCard: { flex: 1, backgroundColor: COLORS.white, borderRadius: RADIUS.md, padding: SPACING.md, alignItems: 'center', ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
+  overviewNum: { fontSize: 18, fontWeight: '800', color: COLORS.textPrimary, marginTop: 4 },
+  overviewLabel: { fontSize: 10, color: COLORS.textMuted },
   revenueRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.xl },
   revCard: { flex: 1, borderRadius: RADIUS.md, padding: SPACING.md, alignItems: 'center', borderWidth: 1 },
   revNum: { fontSize: 22, fontWeight: '800', marginTop: SPACING.xs },
   revLabel: { ...FONTS.small, color: COLORS.textMuted },
-  // Payment Section
   paymentSection: { marginBottom: SPACING.xl },
   paymentSectionHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
   pendingDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: COLORS.gold },
@@ -762,34 +739,16 @@ const styles = StyleSheet.create({
   paymentCardMeta: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, marginBottom: SPACING.md },
   paymentMetaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   paymentMetaText: { ...FONTS.small, color: COLORS.textMuted },
-  paymentGradeBadge: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  paymentGradeText: { fontSize: 10, fontWeight: '700' },
   paymentActions: { flexDirection: 'row', gap: SPACING.sm },
   approveBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, backgroundColor: COLORS.green, paddingVertical: 12, borderRadius: RADIUS.sm, ...SHADOWS.sm },
   approveBtnText: { ...FONTS.caption, color: COLORS.white, fontWeight: '700' },
   rejectBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, backgroundColor: COLORS.redLight, paddingVertical: 12, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.red + '30' },
   rejectBtnText: { ...FONTS.caption, color: COLORS.red, fontWeight: '700' },
-  // Status
   statusPill: { paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
   statusPillText: { ...FONTS.small, fontWeight: '700' },
-  adminNoteRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, marginTop: SPACING.sm, backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm },
-  adminNoteText: { ...FONTS.small, color: COLORS.textSecondary, flex: 1 },
-  // Empty
   emptyPayments: { alignItems: 'center', paddingVertical: 40 },
   emptyPaymentsTitle: { ...FONTS.h3, color: COLORS.green, marginTop: SPACING.md },
   emptyPaymentsText: { ...FONTS.caption, color: COLORS.textMuted },
-  // Reject Modal
-  rejectOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', paddingHorizontal: SPACING.xl },
-  rejectContainer: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xxl },
-  rejectTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.xs },
-  rejectSubtitle: { ...FONTS.body, color: COLORS.textSecondary, marginBottom: SPACING.lg },
-  rejectInput: { backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.sm, padding: SPACING.lg, ...FONTS.body, color: COLORS.textPrimary, borderWidth: 1, borderColor: COLORS.border, height: 100, textAlignVertical: 'top', marginBottom: SPACING.lg },
-  rejectActions: { flexDirection: 'row', gap: SPACING.md },
-  rejectCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: RADIUS.sm, backgroundColor: COLORS.surfaceAlt, alignItems: 'center' },
-  rejectCancelText: { ...FONTS.bodyBold, color: COLORS.textSecondary },
-  rejectConfirmBtn: { flex: 1, paddingVertical: 12, borderRadius: RADIUS.sm, backgroundColor: COLORS.red, alignItems: 'center' },
-  rejectConfirmText: { ...FONTS.bodyBold, color: COLORS.white },
-  // Existing admin styles
   addBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 14, marginBottom: SPACING.lg, ...SHADOWS.md },
   addBtnText: { ...FONTS.bodyBold, color: COLORS.white },
   adminCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.md, padding: SPACING.lg, marginBottom: SPACING.md, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
@@ -798,22 +757,11 @@ const styles = StyleSheet.create({
   adminCardSub: { ...FONTS.small, color: COLORS.textMuted, marginTop: 2 },
   adminCardActions: { flexDirection: 'row', gap: SPACING.sm },
   actionBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
-  adminCardMeta: { flexDirection: 'row', gap: SPACING.lg },
-  metaItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  metaText: { ...FONTS.small, fontWeight: '600' },
-  statsRow: { flexDirection: 'row', gap: SPACING.sm, marginBottom: SPACING.lg },
-  statCard: { flex: 1, borderRadius: RADIUS.md, padding: SPACING.lg, alignItems: 'center' },
-  statNum: { fontSize: 28, fontWeight: '800' },
-  statLabel: { ...FONTS.small, color: COLORS.textMuted },
   userRow: { flexDirection: 'row', alignItems: 'center' },
   userAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary + '15', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
   userAvatarText: { ...FONTS.bodyBold, color: COLORS.primary },
   userInfo: { flex: 1 },
-  userTags: { flexDirection: 'row', gap: SPACING.xs, marginTop: 4 },
-  userTag: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
-  userTagText: { fontSize: 10, fontWeight: '700' },
   infoText: { ...FONTS.body, color: COLORS.textSecondary, lineHeight: 22 },
-  // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
   modalContainer: { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: SPACING.xxl, paddingTop: SPACING.xl, paddingBottom: 40, maxHeight: '90%' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xl },
@@ -827,8 +775,9 @@ const styles = StyleSheet.create({
   formGradeBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   formGradeBtnText: { ...FONTS.caption, color: COLORS.textSecondary },
   formGradeBtnTextActive: { color: COLORS.white, fontWeight: '700' },
-  formHint: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  formHintText: { ...FONTS.small, color: COLORS.greenDark },
+  uploadPickerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.surfaceAlt, borderWidth: 1.5, borderColor: COLORS.primary, borderStyle: 'dashed', borderRadius: RADIUS.md, paddingVertical: 14, marginTop: 4 },
+  uploadPickerBtnText: { ...FONTS.caption, color: COLORS.primary, fontWeight: '700' },
+  successUrlText: { ...FONTS.small, color: COLORS.green, marginTop: 4, fontWeight: '600' },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 16, marginTop: SPACING.xxl, ...SHADOWS.lg },
   saveBtnText: { ...FONTS.h3, color: COLORS.white },
 });
