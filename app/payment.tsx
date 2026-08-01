@@ -13,9 +13,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
-import { useUser } from '@/app/context/UserContext';
-import { supabase } from '@/app/lib/supabase';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { useUser } from '@/context/UserContext';
+import { supabase } from '@/lib/supabase';
 
 interface Payment {
   id: string;
@@ -24,6 +24,7 @@ interface Payment {
   currency: string;
   status: string;
   bank_name: string;
+  plan_type?: string;
   created_at: string;
   admin_note: string | null;
 }
@@ -39,7 +40,7 @@ const BANK_DETAILS = {
 };
 
 export default function PaymentScreen() {
-  const { user, isVIP, refreshUser } = useUser();
+  const { user, isVIP } = useUser();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -47,6 +48,12 @@ export default function PaymentScreen() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+
+  // Subscription plan selection state
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
+
+  const amount = selectedPlan === 'monthly' ? 30 : 300;
+  const planTitleText = selectedPlan === 'monthly' ? 'VIP Monthly Access' : 'VIP Yearly Access (Best Value)';
 
   useEffect(() => {
     if (user) {
@@ -58,7 +65,6 @@ export default function PaymentScreen() {
     if (!user) return;
     setLoadingHistory(true);
     try {
-      // Bypassing edge function for MVP
       const { data } = await supabase
         .from('payments')
         .select('*')
@@ -70,6 +76,7 @@ export default function PaymentScreen() {
         const pending = data.find((p: Payment) => p.status === 'pending');
         if (pending) {
           setPayment(pending);
+          setSelectedPlan((pending.amount >= 300 || pending.plan_type === 'yearly') ? 'yearly' : 'monthly');
           setStep('details');
         }
       }
@@ -82,22 +89,21 @@ export default function PaymentScreen() {
   const handleCreatePayment = async () => {
     if (!user) return;
     setLoading(true);
-    console.log('Payment Requested (Manual) by:', user.email);
+    console.log('Payment Requested (Manual) by:', user.email, 'Plan:', selectedPlan);
 
     try {
-      // Generate a local reference for manual processing
       const ref = 'NM-' + Math.random().toString(36).substr(2, 6).toUpperCase();
 
-      // We still try to insert into DB for tracking, but don't let failure block the UI
       const { data, error } = await supabase
         .from('payments')
         .insert({
           user_id: user.id,
           reference_number: ref,
-          amount: 30,
+          amount: amount,
           currency: 'NAD',
           status: 'pending',
           bank_name: BANK_DETAILS.bankName,
+          plan_type: selectedPlan,
         })
         .select()
         .single();
@@ -105,10 +111,11 @@ export default function PaymentScreen() {
       const newPayment = data || {
         id: 'temp-' + Date.now(),
         reference_number: ref,
-        amount: 30,
+        amount: amount,
         currency: 'NAD',
         status: 'pending',
         bank_name: BANK_DETAILS.bankName,
+        plan_type: selectedPlan,
         created_at: new Date().toISOString(),
         admin_note: null,
       };
@@ -117,15 +124,15 @@ export default function PaymentScreen() {
       setStep('details');
     } catch (err) {
       console.error('Failed to create payment record:', err);
-      // Fallback to purely local state if DB insert fails
       const ref = 'NM-' + Math.random().toString(36).substr(2, 6).toUpperCase();
       setPayment({
         id: 'temp-' + Date.now(),
         reference_number: ref,
-        amount: 30,
+        amount: amount,
         currency: 'NAD',
         status: 'pending',
         bank_name: BANK_DETAILS.bankName,
+        plan_type: selectedPlan,
         created_at: new Date().toISOString(),
         admin_note: null,
       } as Payment);
@@ -139,10 +146,9 @@ export default function PaymentScreen() {
     setLoading(true);
     console.log('Payment Confirmation initiated by:', user.email);
 
-    // Refactored to open WhatsApp as requested
-    const message = `Hi! I've just made a payment of N$30 for NamMath VIP.\n\nMy Email: ${user.email}\nReference: ${payment.reference_number}`;
-    // Using a placeholder Namibian number, user can update this
-    const whatsappUrl = `https://wa.me/264812345678?text=${encodeURIComponent(message)}`;
+    const planDesc = payment.amount >= 300 ? 'Yearly Plan (N$300)' : 'Monthly Plan (N$30)';
+    const message = `Hi! I've just made a payment of N$${payment.amount} (${planDesc}) for NamMath VIP.\n\nMy Email: ${user.email}\nReference: ${payment.reference_number}`;
+    const whatsappUrl = `https://wa.me/264816113313?text=${encodeURIComponent(message)}`;
 
     try {
       await Linking.openURL(whatsappUrl);
@@ -150,7 +156,7 @@ export default function PaymentScreen() {
     } catch (err) {
       Alert.alert(
         'WhatsApp Not Found',
-        `Please send your reference (${payment.reference_number}) and proof of payment to +264 81 234 5678 via WhatsApp manually.`
+        `Please send your reference (${payment.reference_number}) and proof of payment to +264 81 611 3313 via WhatsApp manually.`
       );
       setStep('done');
     }
@@ -159,10 +165,14 @@ export default function PaymentScreen() {
 
   const copyToClipboard = (text: string, field: string) => {
     try {
-      if (typeof navigator !== 'undefined' && navigator.clipboard) {
-        navigator.clipboard.writeText(text);
-      }
-    } catch {}
+      Clipboard.setString(text);
+    } catch {
+      try {
+        if (typeof navigator !== 'undefined' && (navigator as any).clipboard) {
+          (navigator as any).clipboard.writeText(text);
+        }
+      } catch {}
+    }
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
     Alert.alert('Copied!', `${field} copied to clipboard`);
@@ -246,7 +256,6 @@ export default function PaymentScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* Payment History */}
           {paymentHistory.length > 0 && (
             <View style={styles.historySection}>
               <Text style={styles.historySectionTitle}>Payment History</Text>
@@ -282,7 +291,6 @@ export default function PaymentScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.white} />
@@ -291,7 +299,6 @@ export default function PaymentScreen() {
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Progress Steps */}
       <View style={styles.progressContainer}>
         {['Generate Ref', 'Bank Transfer', 'Confirm', 'Verified'].map((label, i) => {
           const stepNames = ['info', 'details', 'confirm', 'done'];
@@ -301,7 +308,7 @@ export default function PaymentScreen() {
           return (
             <View key={i} style={styles.progressStep}>
               <View style={[
-                styles.progressDot, 
+                styles.progressDot,
                 isActive && styles.progressDotActive,
                 isCurrent && styles.progressDotCurrent,
               ]}>
@@ -323,23 +330,49 @@ export default function PaymentScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
-        {/* Step 1: Info */}
+        {/* Step 1: Info & Plan Selector */}
         {step === 'info' && (
           <View>
+            <Text style={styles.sectionHeading}>Choose Your Subscription Plan</Text>
+            <View style={styles.planSelectorRow}>
+              <TouchableOpacity
+                style={[styles.planCard, selectedPlan === 'monthly' && styles.planCardActive]}
+                onPress={() => setSelectedPlan('monthly')}
+                activeOpacity={0.8}
+              >
+                <Text style={[styles.planCardTitle, selectedPlan === 'monthly' && styles.planCardTitleActive]}>Monthly</Text>
+                <Text style={[styles.planCardPrice, selectedPlan === 'monthly' && styles.planCardPriceActive]}>N$30</Text>
+                <Text style={styles.planCardSub}>Per month</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.planCard, selectedPlan === 'yearly' && styles.planCardActive]}
+                onPress={() => setSelectedPlan('yearly')}
+                activeOpacity={0.8}
+              >
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>Save N$60</Text>
+                </View>
+                <Text style={[styles.planCardTitle, selectedPlan === 'yearly' && styles.planCardTitleActive]}>Yearly</Text>
+                <Text style={[styles.planCardPrice, selectedPlan === 'yearly' && styles.planCardPriceActive]}>N$300</Text>
+                <Text style={styles.planCardSub}>12 Months (2 Free)</Text>
+              </TouchableOpacity>
+            </View>
+
             <View style={styles.priceHero}>
               <View style={styles.priceHeroIcon}>
                 <Ionicons name="diamond" size={36} color={COLORS.gold} />
               </View>
-              <Text style={styles.priceHeroTitle}>VIP Monthly Access</Text>
+              <Text style={styles.priceHeroTitle}>{planTitleText}</Text>
               <View style={styles.priceHeroRow}>
                 <Text style={styles.priceHeroCurrency}>N$</Text>
-                <Text style={styles.priceHeroAmount}>30</Text>
-                <Text style={styles.priceHeroPeriod}>/month</Text>
+                <Text style={styles.priceHeroAmount}>{amount}</Text>
+                <Text style={styles.priceHeroPeriod}>/{selectedPlan === 'monthly' ? 'month' : 'year'}</Text>
               </View>
             </View>
 
             <View style={styles.featuresCard}>
-              <Text style={styles.featuresCardTitle}>What you'll get:</Text>
+              <Text style={styles.featuresCardTitle}>What you'll get with VIP:</Text>
               {[
                 { icon: 'document-text', text: 'Step-by-step worked solutions for ALL papers' },
                 { icon: 'infinite', text: 'Unlimited topic quiz attempts' },
@@ -368,19 +401,19 @@ export default function PaymentScreen() {
                 <View style={[styles.howStepDot, { backgroundColor: COLORS.accent + '15' }]}>
                   <Text style={[styles.howStepDotText, { color: COLORS.accent }]}>2</Text>
                 </View>
-                <Text style={styles.howStepText}>You make a bank transfer of N$30 to our FNB account using the reference</Text>
+                <Text style={styles.howStepText}>Make a bank transfer of N${amount} to our FNB account using the reference</Text>
               </View>
               <View style={styles.howStep}>
                 <View style={[styles.howStepDot, { backgroundColor: COLORS.green + '15' }]}>
                   <Text style={[styles.howStepDotText, { color: COLORS.green }]}>3</Text>
                 </View>
-                <Text style={styles.howStepText}>Tap "I've Paid" and our team verifies within 24 hours</Text>
+                <Text style={styles.howStepText}>Confirm your payment and our team verifies within 24 hours</Text>
               </View>
               <View style={styles.howStep}>
                 <View style={[styles.howStepDot, { backgroundColor: COLORS.gold + '15' }]}>
                   <Text style={[styles.howStepDotText, { color: COLORS.gold }]}>4</Text>
                 </View>
-                <Text style={styles.howStepText}>VIP access activated for 30 days!</Text>
+                <Text style={styles.howStepText}>VIP access activated instantly!</Text>
               </View>
             </View>
 
@@ -405,7 +438,6 @@ export default function PaymentScreen() {
         {/* Step 2: Bank Details */}
         {step === 'details' && payment && (
           <View>
-            {/* Reference Number */}
             <View style={styles.referenceCard}>
               <View style={styles.referenceHeader}>
                 <Ionicons name="receipt" size={20} color={COLORS.primary} />
@@ -418,10 +450,10 @@ export default function PaymentScreen() {
               >
                 <Text style={styles.referenceNumber}>{payment.reference_number}</Text>
                 <View style={styles.copyBtn}>
-                  <Ionicons 
-                    name={copiedField === 'Reference Number' ? 'checkmark' : 'copy'} 
-                    size={18} 
-                    color={copiedField === 'Reference Number' ? COLORS.green : COLORS.primary} 
+                  <Ionicons
+                    name={copiedField === 'Reference Number' ? 'checkmark' : 'copy'}
+                    size={18}
+                    color={copiedField === 'Reference Number' ? COLORS.green : COLORS.primary}
                   />
                 </View>
               </TouchableOpacity>
@@ -433,7 +465,6 @@ export default function PaymentScreen() {
               </View>
             </View>
 
-            {/* Bank Details */}
             <View style={styles.bankCard}>
               <View style={styles.bankCardHeader}>
                 <View style={styles.bankIconContainer}>
@@ -441,7 +472,7 @@ export default function PaymentScreen() {
                 </View>
                 <View>
                   <Text style={styles.bankCardTitle}>Bank Transfer Details</Text>
-                  <Text style={styles.bankCardSub}>Transfer N$30.00 to this account</Text>
+                  <Text style={styles.bankCardSub}>Transfer N${payment.amount.toFixed(2)} to this account</Text>
                 </View>
               </View>
 
@@ -452,7 +483,7 @@ export default function PaymentScreen() {
                 { label: 'Branch Code', value: BANK_DETAILS.branchCode, key: 'branch' },
                 { label: 'Branch Name', value: BANK_DETAILS.branchName, key: 'branchname' },
                 { label: 'Account Type', value: BANK_DETAILS.accountType, key: 'type' },
-                { label: 'Amount', value: 'N$30.00', key: 'amount' },
+                { label: 'Amount', value: `N$${payment.amount.toFixed(2)}`, key: 'amount' },
                 { label: 'Reference', value: payment.reference_number, key: 'ref' },
               ].map((detail) => (
                 <TouchableOpacity
@@ -464,17 +495,16 @@ export default function PaymentScreen() {
                   <Text style={styles.bankDetailLabel}>{detail.label}</Text>
                   <View style={styles.bankDetailValueRow}>
                     <Text style={styles.bankDetailValue}>{detail.value}</Text>
-                    <Ionicons 
-                      name={copiedField === detail.label ? 'checkmark-circle' : 'copy-outline'} 
-                      size={16} 
-                      color={copiedField === detail.label ? COLORS.green : COLORS.textMuted} 
+                    <Ionicons
+                      name={copiedField === detail.label ? 'checkmark-circle' : 'copy-outline'}
+                      size={16}
+                      color={copiedField === detail.label ? COLORS.green : COLORS.textMuted}
                     />
                   </View>
                 </TouchableOpacity>
               ))}
             </View>
 
-            {/* Tip */}
             <View style={styles.tipCard}>
               <Ionicons name="bulb" size={18} color={COLORS.gold} />
               <View style={styles.tipContent}>
@@ -491,7 +521,7 @@ export default function PaymentScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="checkmark-done" size={20} color={COLORS.white} />
-              <Text style={styles.paidBtnText}>I've Made the Payment</Text>
+              <Text style={styles.paidBtnText}>I's Made the Payment</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.laterBtn} onPress={() => router.back()}>
@@ -509,7 +539,7 @@ export default function PaymentScreen() {
               </View>
               <Text style={styles.confirmTitle}>Confirm Your Payment</Text>
               <Text style={styles.confirmText}>
-                Please confirm that you have transferred N$30.00 to the FNB account with reference:
+                Please confirm that you have transferred N${payment.amount.toFixed(2)} to the FNB account with reference:
               </Text>
               <View style={styles.confirmRefBox}>
                 <Text style={styles.confirmRef}>{payment.reference_number}</Text>
@@ -523,15 +553,15 @@ export default function PaymentScreen() {
               <Text style={styles.confirmSummaryTitle}>Payment Summary</Text>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Plan</Text>
-                <Text style={styles.summaryValue}>VIP Monthly</Text>
+                <Text style={styles.summaryValue}>{payment.amount >= 300 ? 'VIP Yearly Plan' : 'VIP Monthly Plan'}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Amount</Text>
-                <Text style={styles.summaryValue}>N$30.00</Text>
+                <Text style={styles.summaryValue}>N${payment.amount.toFixed(2)}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Duration</Text>
-                <Text style={styles.summaryValue}>30 days</Text>
+                <Text style={styles.summaryValue}>{payment.amount >= 300 ? '365 days (1 Year)' : '30 days (1 Month)'}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Method</Text>
@@ -554,7 +584,7 @@ export default function PaymentScreen() {
               ) : (
                 <>
                   <Ionicons name="shield-checkmark" size={20} color={COLORS.white} />
-                  <Text style={styles.confirmBtnText}>Confirm - I've Paid N$30</Text>
+                  <Text style={styles.confirmBtnText}>Confirm - I've Paid N${payment.amount.toFixed(2)}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -602,7 +632,7 @@ export default function PaymentScreen() {
                 <View style={styles.timelineConnector} />
                 <View style={styles.timelineItem}>
                   <View style={[styles.timelineDot, { backgroundColor: COLORS.gold }]}>
-                    <Ionicons name="time" size={12} color={COLORS.white} />
+                    <Ionicons name="time" size={12} color={COLORS.gold} />
                   </View>
                   <View style={styles.timelineContent}>
                     <Text style={styles.timelineTitle}>Admin verification</Text>
@@ -634,13 +664,12 @@ export default function PaymentScreen() {
             <View style={styles.supportCard}>
               <Ionicons name="chatbubbles" size={18} color={COLORS.accent} />
               <Text style={styles.supportText}>
-                Need help? Contact us at support@nammath.com
+                Need help? Contact us at sversatech@gmail.com
               </Text>
             </View>
           </View>
         )}
 
-        {/* Payment History */}
         {paymentHistory.length > 0 && step !== 'done' && (
           <View style={styles.historySection}>
             <Text style={styles.historySectionTitle}>Your Payment History</Text>
@@ -677,707 +706,129 @@ export default function PaymentScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingTop: Platform.OS === 'ios' ? 56 : 40,
-    paddingBottom: SPACING.lg,
-    paddingHorizontal: SPACING.xl,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerTitle: {
-    ...FONTS.h3,
-    color: COLORS.white,
-  },
-  scrollContent: {
-    padding: SPACING.xl,
-  },
-  centeredContent: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.xxxl,
-  },
-  emptyTitle: {
-    ...FONTS.h3,
-    color: COLORS.textPrimary,
-    marginTop: SPACING.md,
-  },
-  emptyText: {
-    ...FONTS.caption,
-    color: COLORS.textMuted,
-    marginTop: SPACING.xs,
-    marginBottom: SPACING.xl,
-  },
-  primaryActionBtn: {
-    backgroundColor: COLORS.primary,
-    paddingHorizontal: SPACING.xxl,
-    paddingVertical: 12,
-    borderRadius: RADIUS.md,
-  },
-  primaryActionBtnText: {
-    ...FONTS.bodyBold,
-    color: COLORS.white,
-  },
-  // Progress Steps
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.white,
-    paddingVertical: SPACING.lg,
-    paddingHorizontal: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  progressStep: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressDot: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    backgroundColor: COLORS.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  progressDotActive: {
-    backgroundColor: COLORS.green,
-  },
-  progressDotCurrent: {
-    backgroundColor: COLORS.primary,
-    borderWidth: 2,
-    borderColor: COLORS.primaryLight,
-  },
-  progressDotText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.textMuted,
-  },
-  progressDotTextActive: {
-    color: COLORS.white,
-  },
-  progressLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: COLORS.textMuted,
-    marginLeft: 4,
-  },
-  progressLabelActive: {
-    color: COLORS.textPrimary,
-  },
-  progressLine: {
-    width: 16,
-    height: 2,
-    backgroundColor: COLORS.border,
-    marginHorizontal: 4,
-  },
-  progressLineActive: {
-    backgroundColor: COLORS.green,
-  },
-  // Price Hero
-  priceHero: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xxl,
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-    borderWidth: 2,
-    borderColor: COLORS.gold,
-  },
-  priceHeroIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: COLORS.goldLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.md,
-  },
-  priceHeroTitle: {
-    ...FONTS.h3,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  priceHeroRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-  },
-  priceHeroCurrency: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.goldDark,
-    marginBottom: 6,
-  },
-  priceHeroAmount: {
-    fontSize: 56,
-    fontWeight: '900',
-    color: COLORS.goldDark,
-    lineHeight: 60,
-  },
-  priceHeroPeriod: {
-    fontSize: 18,
-    fontWeight: '500',
-    color: COLORS.goldDark,
-    marginBottom: 10,
-  },
-  // Features
-  featuresCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.sm,
-  },
-  featuresCardTitle: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.lg,
-  },
-  featureItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  featureCheck: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: COLORS.goldLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  featureItemText: {
-    ...FONTS.body,
-    color: COLORS.textPrimary,
-    flex: 1,
-  },
-  // How It Works
-  howItWorksCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.xl,
-    ...SHADOWS.sm,
-  },
-  howItWorksTitle: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.lg,
-  },
-  howStep: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginBottom: SPACING.md,
-  },
-  howStepDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  howStepDotText: {
-    fontSize: 13,
-    fontWeight: '800',
-  },
-  howStepText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    flex: 1,
-    lineHeight: 20,
-  },
-  // Generate Button
-  generateBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.gold,
-    borderRadius: RADIUS.md,
-    paddingVertical: 18,
-    ...SHADOWS.lg,
-  },
-  generateBtnText: {
-    ...FONTS.h3,
-    color: COLORS.white,
-  },
-  // Reference Card
-  referenceCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-    borderWidth: 2,
-    borderColor: COLORS.primary + '30',
-  },
-  referenceHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  referenceLabel: {
-    ...FONTS.bodyBold,
-    color: COLORS.primary,
-  },
-  referenceBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: COLORS.primary + '08',
-    borderRadius: RADIUS.md,
-    padding: SPACING.lg,
-    borderWidth: 2,
-    borderColor: COLORS.primary,
-    borderStyle: 'dashed',
-  },
-  referenceNumber: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: COLORS.primary,
-    letterSpacing: 1,
-  },
-  copyBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: COLORS.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  referenceWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginTop: SPACING.md,
-    backgroundColor: COLORS.goldLight,
-    padding: SPACING.md,
-    borderRadius: RADIUS.sm,
-  },
-  referenceWarningText: {
-    ...FONTS.small,
-    color: COLORS.goldDark,
-    flex: 1,
-    fontWeight: '600',
-  },
-  // Bank Card
-  bankCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.sm,
-  },
-  bankCardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    paddingBottom: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  bankIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: RADIUS.md,
-    backgroundColor: COLORS.accent + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  bankCardTitle: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-  },
-  bankCardSub: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-  },
-  bankDetailRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  bankDetailLabel: {
-    ...FONTS.caption,
-    color: COLORS.textMuted,
-  },
-  bankDetailValueRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-  },
-  bankDetailValue: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-  },
-  // Tip
-  tipCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    backgroundColor: COLORS.goldLight,
-    borderRadius: RADIUS.md,
-    padding: SPACING.lg,
-    marginBottom: SPACING.xl,
-    gap: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.gold + '30',
-  },
-  tipContent: {
-    flex: 1,
-  },
-  tipTitle: {
-    ...FONTS.caption,
-    color: COLORS.goldDark,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  tipText: {
-    ...FONTS.small,
-    color: COLORS.goldDark,
-    lineHeight: 18,
-  },
-  // Paid Button
-  paidBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.green,
-    borderRadius: RADIUS.md,
-    paddingVertical: 18,
-    marginBottom: SPACING.md,
-    ...SHADOWS.lg,
-  },
-  paidBtnText: {
-    ...FONTS.h3,
-    color: COLORS.white,
-  },
-  laterBtn: {
-    alignItems: 'center',
-    paddingVertical: SPACING.md,
-  },
-  laterBtnText: {
-    ...FONTS.caption,
-    color: COLORS.textMuted,
-  },
-  // Confirm
-  confirmCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xxl,
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-  },
-  confirmIcon: {
-    marginBottom: SPACING.lg,
-  },
-  confirmTitle: {
-    ...FONTS.h2,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  confirmText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: SPACING.lg,
-  },
-  confirmRefBox: {
-    backgroundColor: COLORS.primary + '10',
-    borderRadius: RADIUS.md,
-    paddingVertical: SPACING.md,
-    paddingHorizontal: SPACING.xxl,
-    marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.primary + '30',
-  },
-  confirmRef: {
-    ...FONTS.h3,
-    color: COLORS.primary,
-    letterSpacing: 1,
-  },
-  confirmNote: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-    textAlign: 'center',
-    lineHeight: 18,
-  },
-  confirmSummary: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xl,
-    marginBottom: SPACING.xl,
-    ...SHADOWS.sm,
-  },
-  confirmSummaryTitle: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    paddingVertical: SPACING.md,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.borderLight,
-  },
-  summaryLabel: {
-    ...FONTS.caption,
-    color: COLORS.textMuted,
-  },
-  summaryValue: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-  },
-  confirmBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.green,
-    borderRadius: RADIUS.md,
-    paddingVertical: 18,
-    marginBottom: SPACING.md,
-    ...SHADOWS.lg,
-  },
-  confirmBtnText: {
-    ...FONTS.h3,
-    color: COLORS.white,
-  },
-  // Done
-  doneCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xxl,
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-  },
-  doneIconOuter: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: COLORS.goldLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.lg,
-  },
-  doneIconInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...SHADOWS.sm,
-  },
-  doneTitle: {
-    ...FONTS.h2,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  doneText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: SPACING.xxl,
-  },
-  doneTimeline: {
-    width: '100%',
-  },
-  timelineItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  timelineDot: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  timelineContent: {
-    flex: 1,
-  },
-  timelineTitle: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-    fontSize: 13,
-  },
-  timelineTime: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-  },
-  timelineConnector: {
-    width: 2,
-    height: 20,
-    backgroundColor: COLORS.border,
-    marginLeft: 13,
-    marginVertical: 2,
-  },
-  doneBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.primary,
-    borderRadius: RADIUS.md,
-    paddingVertical: 18,
-    marginBottom: SPACING.lg,
-    ...SHADOWS.lg,
-  },
-  doneBtnText: {
-    ...FONTS.h3,
-    color: COLORS.white,
-  },
-  supportCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: SPACING.sm,
-    backgroundColor: COLORS.accent + '10',
-    borderRadius: RADIUS.md,
-    padding: SPACING.lg,
-  },
-  supportText: {
-    ...FONTS.caption,
-    color: COLORS.accent,
-  },
-  // VIP Active
-  vipActiveCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.xxl,
-    alignItems: 'center',
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-    borderWidth: 2,
-    borderColor: COLORS.gold,
-  },
-  vipActiveIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: COLORS.goldLight,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.lg,
-  },
-  vipActiveTitle: {
-    ...FONTS.h2,
-    color: COLORS.goldDark,
-    marginBottom: SPACING.sm,
-  },
-  vipActiveText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: SPACING.xl,
-  },
-  goldOutlineBtn: {
-    paddingHorizontal: SPACING.xxl,
-    paddingVertical: 12,
-    borderRadius: RADIUS.md,
-    borderWidth: 2,
-    borderColor: COLORS.gold,
-  },
-  goldOutlineBtnText: {
-    ...FONTS.bodyBold,
-    color: COLORS.goldDark,
-  },
-  // History
-  historySection: {
-    marginTop: SPACING.xxl,
-  },
-  historySectionTitle: {
-    ...FONTS.h3,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.md,
-  },
-  historyCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
-    padding: SPACING.lg,
-    marginBottom: SPACING.sm,
-    ...SHADOWS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  historyCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: SPACING.sm,
-  },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.full,
-  },
-  statusBadgeText: {
-    ...FONTS.small,
-    fontWeight: '700',
-  },
-  historyAmount: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-  },
-  historyMeta: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  historyRef: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-  },
-  historyDate: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-  },
-  adminNoteBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.sm,
-    marginTop: SPACING.sm,
-    backgroundColor: COLORS.surfaceAlt,
-    padding: SPACING.sm,
-    borderRadius: RADIUS.sm,
-  },
-  adminNoteText: {
-    ...FONTS.small,
-    color: COLORS.textSecondary,
-    flex: 1,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingBottom: SPACING.lg, paddingHorizontal: SPACING.xl, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  backBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { ...FONTS.h3, color: COLORS.white },
+  scrollContent: { padding: SPACING.xl },
+  centeredContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xxxl },
+  emptyTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md },
+  emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs, marginBottom: SPACING.xl },
+  primaryActionBtn: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xxl, paddingVertical: 12, borderRadius: RADIUS.md },
+  primaryActionBtnText: { ...FONTS.bodyBold, color: COLORS.white },
+  progressContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.white, paddingVertical: SPACING.lg, paddingHorizontal: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  progressStep: { flexDirection: 'row', alignItems: 'center' },
+  progressDot: { width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.border, alignItems: 'center', justifyContent: 'center' },
+  progressDotActive: { backgroundColor: COLORS.green },
+  progressDotCurrent: { backgroundColor: COLORS.primary, borderWidth: 2, borderColor: COLORS.primaryLight },
+  progressDotText: { fontSize: 11, fontWeight: '700', color: COLORS.textMuted },
+  progressDotTextActive: { color: COLORS.white },
+  progressLabel: { fontSize: 9, fontWeight: '600', color: COLORS.textMuted, marginLeft: 4 },
+  progressLabelActive: { color: COLORS.textPrimary },
+  progressLine: { width: 16, height: 2, backgroundColor: COLORS.border, marginHorizontal: 4 },
+  progressLineActive: { backgroundColor: COLORS.green },
+  sectionHeading: { ...FONTS.bodyBold, color: COLORS.textPrimary, marginBottom: SPACING.md },
+  planSelectorRow: { flexDirection: 'row', gap: SPACING.md, marginBottom: SPACING.lg },
+  planCard: { flex: 1, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.lg, borderWidth: 2, borderColor: COLORS.border, alignItems: 'center', ...SHADOWS.sm, position: 'relative' },
+  planCardActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primary + '08' },
+  planCardTitle: { ...FONTS.bodyBold, color: COLORS.textSecondary, marginBottom: 4 },
+  planCardTitleActive: { color: COLORS.primary },
+  planCardPrice: { fontSize: 22, fontWeight: '900', color: COLORS.textPrimary, marginBottom: 2 },
+  planCardPriceActive: { color: COLORS.primary },
+  planCardSub: { fontSize: 11, color: COLORS.textMuted },
+  discountBadge: { position: 'absolute', top: -10, backgroundColor: COLORS.gold, paddingHorizontal: 8, paddingVertical: 2, borderRadius: RADIUS.full },
+  discountBadgeText: { fontSize: 9, fontWeight: '800', color: COLORS.white },
+  priceHero: { backgroundColor: COLORS.white, borderRadius: RADIUS.xl, padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.md, borderWidth: 2, borderColor: COLORS.gold },
+  priceHeroIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.sm },
+  priceHeroTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, marginBottom: SPACING.xs },
+  priceHeroRow: { flexDirection: 'row', alignItems: 'flex-end' },
+  priceHeroCurrency: { fontSize: 18, fontWeight: '700', color: COLORS.goldDark, marginBottom: 4 },
+  priceHeroAmount: { fontSize: 44, fontWeight: '900', color: COLORS.goldDark, lineHeight: 48 },
+  priceHeroPeriod: { fontSize: 14, fontWeight: '500', color: COLORS.goldDark, marginBottom: 8 },
+  featuresCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.lg, ...SHADOWS.sm },
+  featuresCardTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, marginBottom: SPACING.md },
+  featureItem: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.sm },
+  featureCheck: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  featureItemText: { ...FONTS.body, color: COLORS.textPrimary, flex: 1, fontSize: 13 },
+  howItWorksCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.xl, ...SHADOWS.sm },
+  howItWorksTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, marginBottom: SPACING.md },
+  howStep: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.sm },
+  howStepDot: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  howStepDotText: { fontSize: 11, fontWeight: '800' },
+  howStepText: { ...FONTS.body, color: COLORS.textSecondary, flex: 1, fontSize: 13, lineHeight: 18 },
+  generateBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.gold, borderRadius: RADIUS.md, paddingVertical: 16, ...SHADOWS.lg },
+  generateBtnText: { ...FONTS.h3, color: COLORS.white, fontSize: 16 },
+  referenceCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.lg, ...SHADOWS.md, borderWidth: 2, borderColor: COLORS.primary + '30' },
+  referenceHeader: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md },
+  referenceLabel: { ...FONTS.bodyBold, color: COLORS.primary },
+  referenceBox: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.primary + '08', borderRadius: RADIUS.md, padding: SPACING.lg, borderWidth: 2, borderColor: COLORS.primary, borderStyle: 'dashed' },
+  referenceNumber: { fontSize: 22, fontWeight: '900', color: COLORS.primary, letterSpacing: 1 },
+  copyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: COLORS.primary + '15', alignItems: 'center', justifyContent: 'center' },
+  referenceWarning: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.md, backgroundColor: COLORS.goldLight, padding: SPACING.md, borderRadius: RADIUS.sm },
+  referenceWarningText: { ...FONTS.small, color: COLORS.goldDark, flex: 1, fontWeight: '600' },
+  bankCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.lg, ...SHADOWS.sm },
+  bankCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.lg, paddingBottom: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  bankIconContainer: { width: 44, height: 44, borderRadius: RADIUS.md, backgroundColor: COLORS.accent + '15', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  bankCardTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary },
+  bankCardSub: { ...FONTS.small, color: COLORS.textMuted },
+  bankDetailRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  bankDetailLabel: { ...FONTS.caption, color: COLORS.textMuted },
+  bankDetailValueRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
+  bankDetailValue: { ...FONTS.bodyBold, color: COLORS.textPrimary },
+  tipCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: COLORS.goldLight, borderRadius: RADIUS.md, padding: SPACING.lg, marginBottom: SPACING.xl, gap: SPACING.md, borderWidth: 1, borderColor: COLORS.gold + '30' },
+  tipContent: { flex: 1 },
+  tipTitle: { ...FONTS.caption, color: COLORS.goldDark, fontWeight: '700', marginBottom: 2 },
+  tipText: { ...FONTS.small, color: COLORS.goldDark, lineHeight: 18 },
+  paidBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.green, borderRadius: RADIUS.md, paddingVertical: 16, marginBottom: SPACING.md, ...SHADOWS.lg },
+  paidBtnText: { ...FONTS.h3, color: COLORS.white, fontSize: 16 },
+  laterBtn: { alignItems: 'center', paddingVertical: SPACING.md },
+  laterBtnText: { ...FONTS.caption, color: COLORS.textMuted },
+  confirmCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.md },
+  confirmIcon: { marginBottom: SPACING.md },
+  confirmTitle: { ...FONTS.h2, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  confirmText: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: SPACING.md },
+  confirmRefBox: { backgroundColor: COLORS.primary + '10', borderRadius: RADIUS.md, paddingVertical: SPACING.md, paddingHorizontal: SPACING.xxl, marginBottom: SPACING.md, borderWidth: 1, borderColor: COLORS.primary + '30' },
+  confirmRef: { ...FONTS.h3, color: COLORS.primary, letterSpacing: 1 },
+  confirmNote: { ...FONTS.small, color: COLORS.textMuted, textAlign: 'center', lineHeight: 18 },
+  confirmSummary: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, marginBottom: SPACING.xl, ...SHADOWS.sm },
+  confirmSummaryTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, marginBottom: SPACING.md },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  summaryLabel: { ...FONTS.caption, color: COLORS.textMuted },
+  summaryValue: { ...FONTS.bodyBold, color: COLORS.textPrimary },
+  confirmBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.green, borderRadius: RADIUS.md, paddingVertical: 16, marginBottom: SPACING.md, ...SHADOWS.lg },
+  confirmBtnText: { ...FONTS.h3, color: COLORS.white, fontSize: 16 },
+  doneCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xxl, alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.md },
+  doneIconOuter: { width: 90, height: 90, borderRadius: 45, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.md },
+  doneIconInner: { width: 70, height: 70, borderRadius: 35, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', ...SHADOWS.sm },
+  doneTitle: { ...FONTS.h2, color: COLORS.textPrimary, marginBottom: SPACING.sm },
+  doneText: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: SPACING.lg },
+  doneTimeline: { width: '100%' },
+  timelineItem: { flexDirection: 'row', alignItems: 'center' },
+  timelineDot: { width: 28, height: 28, borderRadius: 14, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
+  timelineContent: { flex: 1 },
+  timelineTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, fontSize: 13 },
+  timelineTime: { ...FONTS.small, color: COLORS.textMuted },
+  timelineConnector: { width: 2, height: 20, backgroundColor: COLORS.border, marginLeft: 13, marginVertical: 2 },
+  doneBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 16, marginBottom: SPACING.lg, ...SHADOWS.lg },
+  doneBtnText: { ...FONTS.h3, color: COLORS.white, fontSize: 16 },
+  supportCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.accent + '10', borderRadius: RADIUS.md, padding: SPACING.lg },
+  supportText: { ...FONTS.caption, color: COLORS.accent },
+  vipActiveCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xxl, alignItems: 'center', marginBottom: SPACING.lg, ...SHADOWS.md, borderWidth: 2, borderColor: COLORS.gold },
+  vipActiveIcon: { width: 80, height: 80, borderRadius: 40, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg },
+  vipActiveTitle: { ...FONTS.h2, color: COLORS.goldDark, marginBottom: SPACING.sm },
+  vipActiveText: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: SPACING.xl },
+  goldOutlineBtn: { paddingHorizontal: SPACING.xxl, paddingVertical: 12, borderRadius: RADIUS.md, borderWidth: 2, borderColor: COLORS.gold },
+  goldOutlineBtnText: { ...FONTS.bodyBold, color: COLORS.goldDark },
+  historySection: { marginTop: SPACING.xl },
+  historySectionTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.md },
+  historyCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.md, padding: SPACING.lg, marginBottom: SPACING.sm, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
+  historyCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.sm },
+  statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
+  statusBadgeText: { ...FONTS.small, fontWeight: '700' },
+  historyAmount: { ...FONTS.bodyBold, color: COLORS.textPrimary },
+  historyMeta: { flexDirection: 'row', justifyContent: 'space-between' },
+  historyRef: { ...FONTS.small, color: COLORS.textMuted, fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace' },
+  historyDate: { ...FONTS.small, color: COLORS.textMuted },
+  adminNoteBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm, backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm },
+  adminNoteText: { ...FONTS.small, color: COLORS.textSecondary, flex: 1 },
 });

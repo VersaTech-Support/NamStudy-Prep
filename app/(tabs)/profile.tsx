@@ -7,14 +7,16 @@ import {
   TouchableOpacity,
   Platform,
   Alert,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
-import { useUser } from '@/app/context/UserContext';
-import { supabase } from '@/app/lib/supabase';
-import AuthModal from '@/app/components/AuthModal';
-import UpgradeModal from '@/app/components/UpgradeModal';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { useUser } from '@/context/UserContext';
+import { supabase } from '@/lib/supabase';
+import AuthModal from '@/components/AuthModal';
+import UpgradeModal from '@/components/UpgradeModal';
+import * as ImagePicker from 'expo-image-picker';
 
 interface Payment {
   id: string;
@@ -28,7 +30,7 @@ interface Payment {
 }
 
 export default function ProfileScreen() {
-  const { user, isVIP, isAdmin, logout, refreshUser } = useUser();
+  const { user, isVIP, isAdmin, logout, refreshUser, updateProfile } = useUser();
   const router = useRouter();
   const [authVisible, setAuthVisible] = useState(false);
   const [upgradeVisible, setUpgradeVisible] = useState(false);
@@ -50,7 +52,31 @@ export default function ProfileScreen() {
         .eq('user_id', user.id)
         .order('created_at', { ascending: false });
       if (data) setPayments(data);
-    } catch {}
+    } catch { }
+  };
+
+  const pickImage = async () => {
+    let result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.8,
+    });
+
+    if (!result.canceled && result.assets[0]) {
+      const asset = result.assets[0];
+      const uri = asset.uri;
+      const filename = uri.split('/').pop() || 'profile.jpg';
+      const match = /\.(\w+)$/.exec(filename);
+      const type = match ? `image/${match[1]}` : `image/jpeg`;
+
+      const success = await updateProfile({ avatar_file: { uri, type, name: filename } });
+      if (success) {
+        Alert.alert('Success', 'Profile picture updated successfully!');
+      } else {
+        Alert.alert('Error', 'Failed to upload profile picture.');
+      }
+    }
   };
 
   const getStatusColor = (s: string) => s === 'pending' ? COLORS.gold : s === 'approved' ? COLORS.green : COLORS.red;
@@ -84,6 +110,8 @@ export default function ProfileScreen() {
     : null;
   const pendingPayment = payments.find(p => p.status === 'pending');
   const menuItems = [
+    { icon: 'create', label: 'Edit Profile', color: COLORS.primary, onPress: () => router.push('/edit-profile') },
+    { icon: 'stats-chart', label: 'My Performance', color: COLORS.green, onPress: () => router.push('/analytics') }, // <--- Add this line here
     { icon: 'document-text', label: 'My Papers', color: COLORS.green, onPress: () => router.push('/papers') },
     { icon: 'help-circle', label: 'My Quizzes', color: COLORS.accent, onPress: () => router.push('/quizzes') },
     { icon: 'card', label: 'Payment & Billing', color: COLORS.gold, onPress: () => router.push('/payment') },
@@ -99,12 +127,19 @@ export default function ProfileScreen() {
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
         {/* Profile Card */}
         <View style={styles.profileCard}>
-          <View style={{ position: 'relative', marginBottom: SPACING.md }}>
+          <TouchableOpacity onPress={pickImage} style={{ position: 'relative', marginBottom: SPACING.md }} activeOpacity={0.9}>
             <View style={styles.avatar}>
-              <Text style={styles.avatarText}>{user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</Text>
+              {user.avatar_url ? (
+                <Image source={{ uri: user.avatar_url }} style={{ width: 72, height: 72, borderRadius: 36 }} />
+              ) : (
+                <Text style={styles.avatarText}>{user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</Text>
+              )}
+            </View>
+            <View style={styles.cameraOverlay}>
+              <Ionicons name="camera" size={12} color={COLORS.white} />
             </View>
             {isVIP && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
-          </View>
+          </TouchableOpacity>
           <Text style={styles.profileName}>{user.name}</Text>
           <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{user.email}</Text>
           <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
@@ -227,9 +262,10 @@ const styles = StyleSheet.create({
   signInBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xxxl, paddingVertical: 16, borderRadius: RADIUS.md, ...SHADOWS.lg },
   signInBtnText: { ...FONTS.h3, color: COLORS.white },
   profileCard: { backgroundColor: COLORS.white, marginHorizontal: SPACING.xl, marginTop: SPACING.xl, borderRadius: RADIUS.lg, padding: SPACING.xxl, alignItems: 'center', ...SHADOWS.md },
-  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  avatar: { width: 72, height: 72, borderRadius: 36, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', overflow: 'hidden' },
   avatarText: { fontSize: 26, fontWeight: '800', color: COLORS.white },
-  vipBadgeSmall: { position: 'absolute', bottom: 0, right: -4, width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: COLORS.white },
+  cameraOverlay: { position: 'absolute', bottom: 0, right: 0, width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: COLORS.white },
+  vipBadgeSmall: { position: 'absolute', bottom: 0, left: -4, width: 24, height: 24, borderRadius: 12, backgroundColor: COLORS.gold, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: COLORS.white },
   profileName: { ...FONTS.h2, color: COLORS.textPrimary, marginBottom: 2 },
   profileTag: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full },
   profileTagText: { ...FONTS.small, fontWeight: '700' },

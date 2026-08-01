@@ -10,10 +10,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
-import { useUser } from '@/app/context/UserContext';
-import AuthModal from '@/app/components/AuthModal';
-import { supabase } from '@/app/lib/supabase';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { useUser } from '@/context/UserContext';
+import AuthModal from '@/components/AuthModal';
+import { supabase } from '@/lib/supabase';
 
 const { width } = Dimensions.get('window');
 
@@ -94,9 +94,9 @@ export default function HomeScreen() {
             <View style={styles.topBar}>
               <View style={styles.logoRow}>
                 <View style={styles.logoIcon}>
-                  <Ionicons name="calculator" size={20} color={COLORS.white} />
+                  <Ionicons name="book" size={20} color={COLORS.white} />
                 </View>
-                <Text style={styles.logoText}>NamMath Prep</Text>
+                <Text style={styles.logoText}>NamStudy Prep</Text>
               </View>
               {user ? (
                 <View style={styles.userBadge}>
@@ -120,11 +120,11 @@ export default function HomeScreen() {
             <View style={styles.heroContent}>
               <View style={styles.heroBadge}>
                 <Ionicons name="star" size={12} color={COLORS.gold} />
-                <Text style={styles.heroBadgeText}>Namibia's #1 Math Prep App</Text>
+                <Text style={styles.heroBadgeText}>Namibia's #1 Study Prep App</Text>
               </View>
-              <Text style={styles.heroTitle}>Master NSSCO{'\n'}& NSSCAS Math</Text>
+              <Text style={styles.heroTitle}>Master NSSCO{'\n'}& NSSCAS Exams</Text>
               <Text style={styles.heroSubtitle}>
-                Free past papers, step-by-step solutions, and topic quizzes to ace your exams.
+                Free past papers, step-by-step solutions, and topic quizzes to ace your subjects.
               </Text>
 
               <View style={styles.heroBtnRow}>
@@ -167,7 +167,7 @@ export default function HomeScreen() {
         {/* Features Section */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Everything You Need</Text>
-          <Text style={styles.sectionSubtitle}>All the tools to prepare for your math exams</Text>
+          <Text style={styles.sectionSubtitle}>All the tools to prepare for your exams</Text>
 
           {features.map((feature, i) => (
             <TouchableOpacity key={i} style={styles.featureCard} onPress={feature.action} activeOpacity={0.7}>
@@ -287,12 +287,12 @@ export default function HomeScreen() {
         {/* Footer */}
         <View style={styles.footer}>
           <View style={styles.footerLogo}>
-            <Ionicons name="calculator" size={18} color={COLORS.textMuted} />
-            <Text style={styles.footerLogoText}>NamMath Prep</Text>
+            <Ionicons name="book" size={18} color={COLORS.textMuted} />
+            <Text style={styles.footerLogoText}>NamStudy Prep</Text>
           </View>
           <Text style={styles.footerText}>Your Path to Exam Success</Text>
           <Text style={styles.footerCopy}>Made with dedication for Namibian students</Text>
-          <Text style={styles.footerCopy}>2026 NamMath Prep. All rights reserved.</Text>
+          <Text style={styles.footerCopy}>2026 NamStudy Prep. All rights reserved.</Text>
         </View>
       </ScrollView>
 

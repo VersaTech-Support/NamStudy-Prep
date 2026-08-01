@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,12 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
-import { useUser } from '@/app/context/UserContext';
-import { supabase } from '@/app/lib/supabase';
-import PaperCard from '@/app/components/PaperCard';
-import UpgradeModal from '@/app/components/UpgradeModal';
-import AuthModal from '@/app/components/AuthModal';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { useUser } from '@/context/UserContext';
+import { supabase } from '@/lib/supabase';
+import PaperCard from '@/components/PaperCard';
+import UpgradeModal from '@/components/UpgradeModal';
+import AuthModal from '@/components/AuthModal';
 
 interface Paper {
   id: string;
@@ -25,6 +25,7 @@ interface Paper {
   year: number;
   paper_number: number;
   grade_level: string;
+  subject?: string;
   paper_pdf_url: string;
   solution_pdf_url: string | null;
   description: string;
@@ -36,39 +37,71 @@ export default function PapersScreen() {
   const [loading, setLoading] = useState(true);
   const [gradeFilter, setGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS'>('All');
   const [yearFilter, setYearFilter] = useState<number | null>(null);
+  const [subjectFilter, setSubjectFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [authVisible, setAuthVisible] = useState(false);
 
   useEffect(() => {
+    const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+
+    if (user && !userIsAdmin && user.grade_level) {
+      setGradeFilter(user.grade_level as 'NSSCO' | 'NSSCAS');
+    } else {
+      setGradeFilter('All');
+    }
     fetchPapers();
-  }, []);
+  }, [user]);
 
   const fetchPapers = async () => {
     setLoading(true);
-    const { data, error } = await supabase
+
+    let query = supabase
       .from('papers')
       .select('*')
       .order('year', { ascending: false })
       .order('paper_number', { ascending: true });
-    
-    if (data) setPapers(data);
+
+    const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+
+    if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
+      query = query.in('subject', user.subjects);
+    }
+
+    if (user && !userIsAdmin && user.grade_level) {
+      query = query.eq('grade_level', user.grade_level);
+    }
+
+    const { data, error } = await query;
+
+    if (error) {
+      console.error('Error fetching papers:', error.message);
+    } else if (data) {
+      setPapers(data);
+    }
+
     setLoading(false);
   };
 
   const filteredPapers = papers.filter(p => {
+    if (subjectFilter !== 'All' && p.subject !== subjectFilter) return false;
     if (gradeFilter !== 'All' && p.grade_level !== gradeFilter) return false;
     if (yearFilter && p.year !== yearFilter) return false;
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      return p.title.toLowerCase().includes(query) || 
-             p.description.toLowerCase().includes(query) ||
-             p.grade_level.toLowerCase().includes(query);
+      return p.title.toLowerCase().includes(query) ||
+        p.description.toLowerCase().includes(query) ||
+        p.grade_level.toLowerCase().includes(query) ||
+        (p.subject && p.subject.toLowerCase().includes(query));
     }
     return true;
   });
 
   const years = [...new Set(papers.map(p => p.year))].sort((a, b) => b - a);
+
+  const availableSubjects: string[] = user?.subjects && user.subjects.length > 0
+    ? user.subjects
+    : [...new Set(papers.map(p => p.subject).filter((s): s is string => Boolean(s)))];
 
   const handleDownloadPaper = (paper: Paper) => {
     Linking.openURL(paper.paper_pdf_url).catch(() => {
@@ -94,7 +127,6 @@ export default function PapersScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerContent}>
           <Text style={styles.headerTitle}>Paper Library</Text>
@@ -105,7 +137,6 @@ export default function PapersScreen() {
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Search */}
         <View style={styles.searchContainer}>
           <View style={styles.searchBar}>
             <Ionicons name="search" size={18} color={COLORS.textMuted} />
@@ -124,7 +155,33 @@ export default function PapersScreen() {
           </View>
         </View>
 
-        {/* Grade Filter */}
+        {availableSubjects.length > 1 && (
+          <View style={styles.filterSection}>
+            <Text style={styles.filterLabel}>Subject</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
+              <TouchableOpacity
+                style={[styles.filterChip, subjectFilter === 'All' && styles.filterChipActive]}
+                onPress={() => setSubjectFilter('All')}
+              >
+                <Text style={[styles.filterChipText, subjectFilter === 'All' && styles.filterChipTextActive]}>
+                  All Subjects
+                </Text>
+              </TouchableOpacity>
+              {availableSubjects.map(sub => (
+                <TouchableOpacity
+                  key={sub}
+                  style={[styles.filterChip, subjectFilter === sub && styles.filterChipActive]}
+                  onPress={() => setSubjectFilter(subjectFilter === sub ? 'All' : sub)}
+                >
+                  <Text style={[styles.filterChipText, subjectFilter === sub && styles.filterChipTextActive]}>
+                    {sub}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        )}
+
         <View style={styles.filterSection}>
           <Text style={styles.filterLabel}>Grade Level</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
@@ -142,7 +199,6 @@ export default function PapersScreen() {
           </ScrollView>
         </View>
 
-        {/* Year Filter */}
         <View style={styles.filterSection}>
           <Text style={styles.filterLabel}>Year</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
@@ -166,7 +222,6 @@ export default function PapersScreen() {
           </ScrollView>
         </View>
 
-        {/* Free Banner */}
         <View style={styles.freeBanner}>
           <Ionicons name="gift" size={20} color={COLORS.green} />
           <View style={styles.freeBannerContent}>
@@ -175,7 +230,6 @@ export default function PapersScreen() {
           </View>
         </View>
 
-        {/* Papers List */}
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
@@ -211,138 +265,30 @@ export default function PapersScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  header: {
-    backgroundColor: COLORS.primary,
-    paddingTop: Platform.OS === 'ios' ? 56 : 40,
-    paddingBottom: SPACING.xl,
-    paddingHorizontal: SPACING.xl,
-  },
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
   headerContent: {},
-  headerTitle: {
-    ...FONTS.h1,
-    color: COLORS.white,
-    marginBottom: 2,
-  },
-  headerSubtitle: {
-    ...FONTS.caption,
-    color: 'rgba(255,255,255,0.7)',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  // Search
-  searchContainer: {
-    paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.lg,
-  },
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.md,
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: 12,
-    gap: SPACING.sm,
-    ...SHADOWS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  searchInput: {
-    flex: 1,
-    ...FONTS.body,
-    color: COLORS.textPrimary,
-  },
-  // Filters
-  filterSection: {
-    paddingTop: SPACING.lg,
-    paddingLeft: SPACING.xl,
-  },
-  filterLabel: {
-    ...FONTS.caption,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.sm,
-  },
-  filterScroll: {
-    flexGrow: 0,
-  },
-  filterChip: {
-    paddingHorizontal: SPACING.lg,
-    paddingVertical: SPACING.sm,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.white,
-    marginRight: SPACING.sm,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  filterChipActive: {
-    backgroundColor: COLORS.primary,
-    borderColor: COLORS.primary,
-  },
-  filterChipText: {
-    ...FONTS.caption,
-    color: COLORS.textSecondary,
-  },
-  filterChipTextActive: {
-    color: COLORS.white,
-    fontWeight: '700',
-  },
-  // Free Banner
-  freeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.greenLight,
-    marginHorizontal: SPACING.xl,
-    marginTop: SPACING.lg,
-    marginBottom: SPACING.md,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    gap: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.green + '30',
-  },
-  freeBannerContent: {
-    flex: 1,
-  },
-  freeBannerTitle: {
-    ...FONTS.caption,
-    color: COLORS.greenDark,
-    fontWeight: '700',
-  },
-  freeBannerText: {
-    ...FONTS.small,
-    color: COLORS.greenDark,
-  },
-  // Papers
-  papersList: {
-    paddingHorizontal: SPACING.xl,
-  },
-  // Loading
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  loadingText: {
-    ...FONTS.caption,
-    color: COLORS.textMuted,
-    marginTop: SPACING.md,
-  },
-  // Empty
-  emptyContainer: {
-    alignItems: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    ...FONTS.h3,
-    color: COLORS.textPrimary,
-    marginTop: SPACING.md,
-  },
-  emptyText: {
-    ...FONTS.caption,
-    color: COLORS.textMuted,
-    marginTop: SPACING.xs,
-  },
+  headerTitle: { ...FONTS.h1, color: COLORS.white, marginBottom: 2 },
+  headerSubtitle: { ...FONTS.caption, color: 'rgba(255,255,255,0.7)' },
+  scrollView: { flex: 1 },
+  searchContainer: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
+  searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 12, gap: SPACING.sm, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.border },
+  searchInput: { flex: 1, ...FONTS.body, color: COLORS.textPrimary },
+  filterSection: { paddingTop: SPACING.lg, paddingLeft: SPACING.xl },
+  filterLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginBottom: SPACING.sm },
+  filterScroll: { flexGrow: 0 },
+  filterChip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.white, marginRight: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
+  filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipText: { ...FONTS.caption, color: COLORS.textSecondary },
+  filterChipTextActive: { color: COLORS.white, fontWeight: '700' },
+  freeBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.greenLight, marginHorizontal: SPACING.xl, marginTop: SPACING.lg, marginBottom: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, gap: SPACING.md, borderWidth: 1, borderColor: COLORS.green + '30' },
+  freeBannerContent: { flex: 1 },
+  freeBannerTitle: { ...FONTS.caption, color: COLORS.greenDark, fontWeight: '700' },
+  freeBannerText: { ...FONTS.small, color: COLORS.greenDark },
+  papersList: { paddingHorizontal: SPACING.xl },
+  loadingContainer: { alignItems: 'center', paddingVertical: 60 },
+  loadingText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.md },
+  emptyContainer: { alignItems: 'center', paddingVertical: 60 },
+  emptyTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md },
+  emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs },
 });

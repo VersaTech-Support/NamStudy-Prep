@@ -11,9 +11,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
-import { useUser } from '@/app/context/UserContext';
-import { supabase } from '@/app/lib/supabase';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { useUser } from '@/context/UserContext';
+import { supabase } from '@/lib/supabase';
 
 interface QuizQuestion {
   id: string;
@@ -54,7 +54,7 @@ export default function QuizScreen() {
       .select('*')
       .eq('topic_name', topic)
       .eq('grade_level', gradeLevel);
-    
+
     if (data) {
       // Shuffle questions
       const shuffled = data.sort(() => Math.random() - 0.5);
@@ -75,12 +75,39 @@ export default function QuizScreen() {
     }
   };
 
+  // --- NEW LOGIC: Save the score to the database ---
+  const saveQuizScore = async (finalScore: number, totalQuestions: number) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('quiz_results')
+        .insert({
+          user_id: user.id,
+          topic_name: topic,
+          score: finalScore,
+          total_questions: totalQuestions,
+          grade_level: gradeLevel || user.grade_level || 'NSSCO',
+        });
+
+      if (error) {
+        console.error('Error saving quiz score:', error.message);
+      } else {
+        console.log('Quiz score securely saved to database!');
+      }
+    } catch (err) {
+      console.error('Unexpected error saving score:', err);
+    }
+  };
+
   const handleNext = () => {
     if (currentIndex < questions.length - 1) {
       setCurrentIndex(prev => prev + 1);
       setSelectedAnswer(null);
       setShowExplanation(false);
     } else {
+      // Trigger the save function right before completing the quiz
+      saveQuizScore(score, questions.length);
       setQuizComplete(true);
     }
   };
@@ -220,7 +247,6 @@ export default function QuizScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.white} />
@@ -229,13 +255,11 @@ export default function QuizScreen() {
         <Text style={styles.headerCounter}>{currentIndex + 1}/{questions.length}</Text>
       </View>
 
-      {/* Progress Bar */}
       <View style={styles.progressBar}>
         <View style={[styles.progressFill, { width: `${((currentIndex + 1) / questions.length) * 100}%` }]} />
       </View>
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-        {/* Question Info */}
         <View style={styles.questionInfo}>
           <View style={[styles.diffBadge, { backgroundColor: getDifficultyColor(currentQuestion.difficulty) + '15' }]}>
             <Text style={[styles.diffText, { color: getDifficultyColor(currentQuestion.difficulty) }]}>
@@ -248,13 +272,11 @@ export default function QuizScreen() {
           </View>
         </View>
 
-        {/* Question */}
         <View style={styles.questionCard}>
           <Text style={styles.questionLabel}>Question {currentIndex + 1}</Text>
           <Text style={styles.questionText}>{currentQuestion.question}</Text>
         </View>
 
-        {/* Options */}
         <View style={styles.optionsContainer}>
           {options.map((option) => (
             <TouchableOpacity
@@ -264,12 +286,12 @@ export default function QuizScreen() {
               activeOpacity={selectedAnswer ? 1 : 0.7}
               disabled={!!selectedAnswer}
             >
-              <View style={[styles.optionKey, 
-                selectedAnswer === option.key && option.key === currentQuestion.correct_answer && styles.optionKeyCorrect,
-                selectedAnswer === option.key && option.key !== currentQuestion.correct_answer && styles.optionKeyWrong,
+              <View style={[styles.optionKey,
+              selectedAnswer === option.key && option.key === currentQuestion.correct_answer && styles.optionKeyCorrect,
+              selectedAnswer === option.key && option.key !== currentQuestion.correct_answer && styles.optionKeyWrong,
               ]}>
                 <Text style={[styles.optionKeyText,
-                  selectedAnswer === option.key && styles.optionKeyTextSelected,
+                selectedAnswer === option.key && styles.optionKeyTextSelected,
                 ]}>{option.key}</Text>
               </View>
               <Text style={getOptionTextStyle(option.key)}>{option.text}</Text>
@@ -280,7 +302,6 @@ export default function QuizScreen() {
           ))}
         </View>
 
-        {/* Explanation */}
         {showExplanation && currentQuestion.explanation_text && (
           <View style={styles.explanationCard}>
             <View style={styles.explanationHeader}>
@@ -291,7 +312,6 @@ export default function QuizScreen() {
           </View>
         )}
 
-        {/* Next Button */}
         {selectedAnswer && (
           <TouchableOpacity style={styles.nextBtn} onPress={handleNext} activeOpacity={0.8}>
             <Text style={styles.nextBtnText}>
@@ -341,7 +361,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: RADIUS.full,
   },
-  // Progress
   progressBar: {
     height: 4,
     backgroundColor: COLORS.border,
@@ -355,7 +374,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: SPACING.xl,
   },
-  // Question Info
   questionInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -386,7 +404,6 @@ const styles = StyleSheet.create({
     color: COLORS.goldDark,
     fontWeight: '700',
   },
-  // Question
   questionCard: {
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.lg,
@@ -406,7 +423,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     lineHeight: 28,
   },
-  // Options
   optionsContainer: {
     gap: SPACING.md,
     marginBottom: SPACING.xl,
@@ -473,7 +489,6 @@ const styles = StyleSheet.create({
     width: 24,
     marginLeft: SPACING.sm,
   },
-  // Explanation
   explanationCard: {
     backgroundColor: COLORS.goldLight,
     borderRadius: RADIUS.md,
@@ -497,7 +512,6 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     lineHeight: 22,
   },
-  // Next Button
   nextBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -512,7 +526,6 @@ const styles = StyleSheet.create({
     ...FONTS.h3,
     color: COLORS.white,
   },
-  // Loading
   loadingContainer: {
     flex: 1,
     alignItems: 'center',
@@ -544,7 +557,6 @@ const styles = StyleSheet.create({
     ...FONTS.bodyBold,
     color: COLORS.white,
   },
-  // Results
   resultsContainer: {
     flex: 1,
     alignItems: 'center',

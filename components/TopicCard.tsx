@@ -6,7 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/app/constants/theme';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 
 const TOPIC_ICONS: Record<string, { icon: string; color: string; bg: string }> = {
   'Algebra': { icon: 'calculator', color: '#7C3AED', bg: '#EDE9FE' },
