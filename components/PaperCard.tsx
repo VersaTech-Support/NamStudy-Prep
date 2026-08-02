@@ -14,6 +14,7 @@ interface Paper {
   year: number;
   paper_number: number;
   grade_level: string;
+  subject?: string;
   paper_pdf_url: string;
   solution_pdf_url: string | null;
   description: string;
@@ -22,11 +23,13 @@ interface Paper {
 interface PaperCardProps {
   paper: Paper;
   isVIP: boolean;
+  isBookmarked?: boolean;
   onDownloadPaper: (paper: Paper) => void;
   onViewSolution: (paper: Paper) => void;
+  onToggleBookmark?: (paper: Paper) => void;
 }
 
-export default function PaperCard({ paper, isVIP, onDownloadPaper, onViewSolution }: PaperCardProps) {
+export default function PaperCard({ paper, isVIP, isBookmarked, onDownloadPaper, onViewSolution, onToggleBookmark }: PaperCardProps) {
   const yearColor = paper.year >= 2023 ? COLORS.primary : COLORS.accent;
 
   return (
@@ -47,8 +50,24 @@ export default function PaperCard({ paper, isVIP, onDownloadPaper, onViewSolutio
             </Text>
           </View>
         </View>
-        <View style={styles.paperIcon}>
-          <Ionicons name="document-text" size={20} color={COLORS.primary} />
+        <View style={styles.headerRight}>
+          {onToggleBookmark && (
+            <TouchableOpacity
+              style={styles.bookmarkBtn}
+              onPress={() => onToggleBookmark(paper)}
+              activeOpacity={0.6}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={isBookmarked ? 'heart' : 'heart-outline'}
+                size={22}
+                color={isBookmarked ? '#EF4444' : COLORS.textMuted}
+              />
+            </TouchableOpacity>
+          )}
+          <View style={styles.paperIcon}>
+            <Ionicons name="document-text" size={20} color={COLORS.primary} />
+          </View>
         </View>
       </View>
 
@@ -108,6 +127,14 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: 'row',
     gap: SPACING.sm,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  bookmarkBtn: {
+    padding: 4,
   },
   yearBadge: {
     paddingHorizontal: SPACING.md,

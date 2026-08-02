@@ -25,7 +25,7 @@ interface TopicSummary {
 }
 
 export default function QuizzesScreen() {
-  const { user, isVIP } = useUser();
+  const { user, isVIP, toggleBookmark, isBookmarked } = useUser();
   const router = useRouter();
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,6 +113,15 @@ export default function QuizzesScreen() {
         subject: topic.subject
       },
     });
+  };
+
+  const handleToggleBookmark = async (topic: TopicSummary) => {
+    if (!user) {
+      setAuthVisible(true);
+      return;
+    }
+    const key = `${topic.topicName}-${topic.gradeLevel}-${topic.subject}`;
+    await toggleBookmark(key, 'quiz', topic.topicName, topic);
   };
 
   return (
@@ -206,7 +215,9 @@ export default function QuizzesScreen() {
                   gradeLevel={topic.gradeLevel}
                   isVIP={isVIP}
                   freeAttemptsLeft={freeAttempts[key] ?? 3}
+                  isBookmarked={isBookmarked(key)}
                   onPress={() => handleTopicPress(topic)}
+                  onToggleBookmark={() => handleToggleBookmark(topic)}
                 />
               );
             })}

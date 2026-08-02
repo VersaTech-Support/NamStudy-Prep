@@ -32,7 +32,7 @@ interface Paper {
 }
 
 export default function PapersScreen() {
-  const { user, isVIP } = useUser();
+  const { user, isVIP, toggleBookmark, isBookmarked } = useUser();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
   const [gradeFilter, setGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS'>('All');
@@ -107,6 +107,14 @@ export default function PapersScreen() {
     Linking.openURL(paper.paper_pdf_url).catch(() => {
       Alert.alert('Download', `Paper: ${paper.title}\n\nThe download link will open in your browser. This paper is 100% FREE!`);
     });
+  };
+
+  const handleToggleBookmark = async (paper: Paper) => {
+    if (!user) {
+      setAuthVisible(true);
+      return;
+    }
+    await toggleBookmark(paper.id, 'paper', paper.title, paper);
   };
 
   const handleViewSolution = (paper: Paper) => {
@@ -248,8 +256,10 @@ export default function PapersScreen() {
                 key={paper.id}
                 paper={paper}
                 isVIP={isVIP}
+                isBookmarked={isBookmarked(paper.id)}
                 onDownloadPaper={handleDownloadPaper}
                 onViewSolution={handleViewSolution}
+                onToggleBookmark={handleToggleBookmark}
               />
             ))}
           </View>

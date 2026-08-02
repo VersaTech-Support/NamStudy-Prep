@@ -12,7 +12,16 @@ interface UserProfile {
   role?: string;
   avatar_url?: string | null;
   school?: string | null;
-  subjects?: string[]; // NEW: Added subjects array
+  subjects?: string[];
+}
+
+export interface Bookmark {
+  id: string;
+  item_id: string;
+  item_type: 'paper' | 'quiz';
+  title: string;
+  metadata?: any;
+  created_at?: string;
 }
 
 interface UserContextType {
@@ -20,12 +29,16 @@ interface UserContextType {
   isVIP: boolean;
   isAdmin: boolean;
   loading: boolean;
+  bookmarks: Bookmark[];
+  streak: number;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS') => Promise<boolean>;
-  updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>; // NEW: Added subjects to signature
+  updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  toggleBookmark: (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => Promise<void>;
+  isBookmarked: (item_id: string) => boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -33,6 +46,8 @@ const UserContext = createContext<UserContextType | undefined>(undefined);
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
+  const [streak, setStreak] = useState(0);
 
   useEffect(() => {
     checkSession();
@@ -80,6 +95,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           ...data,
           isAdmin: data.is_admin === true || data.role === 'admin',
         });
+        fetchBookmarks(data.id);
+        updateUserStreak(data.id);
       }
     } catch (err) {
       console.error('Unexpected profile fetch error:', err);
@@ -226,6 +243,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setBookmarks([]);
   };
 
   const refreshUser = async () => {
@@ -235,11 +253,116 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // ── Bookmark functions ──
+  const fetchBookmarks = async (userId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      if (data) setBookmarks(data);
+      if (error) console.error('Fetch bookmarks error:', error.message);
+    } catch (err) {
+      console.error('Fetch bookmarks exception:', err);
+    }
+  };
+
+  const toggleBookmark = async (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => {
+    if (!user) return;
+    const existing = bookmarks.find(b => b.item_id === item_id);
+    if (existing) {
+      // Remove bookmark
+      const { error } = await supabase.from('bookmarks').delete().eq('id', existing.id);
+      if (!error) {
+        setBookmarks(prev => prev.filter(b => b.id !== existing.id));
+      }
+    } else {
+      // Add bookmark
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .insert({ user_id: user.id, item_id, item_type, title, metadata })
+        .select()
+        .single();
+      if (data && !error) {
+        setBookmarks(prev => [data, ...prev]);
+      }
+    }
+  };
+
+  const isBookmarkedFn = (item_id: string): boolean => {
+    return bookmarks.some(b => b.item_id === item_id);
+  };
+
+  // ── Streak functions ──
+  const updateUserStreak = async (userId: string) => {
+    try {
+      const todayStr = new Date().toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('user_streaks')
+        .select('*')
+        .eq('user_id', userId)
+        .single();
+        
+      if (error && error.code !== 'PGRST116') {
+        console.error('Streak fetch error:', error.message);
+        return;
+      }
+
+      if (!data) {
+        // No streak record yet, create one
+        const { error: insertErr } = await supabase
+          .from('user_streaks')
+          .insert({
+            user_id: userId,
+            current_streak: 1,
+            longest_streak: 1,
+            last_active_date: todayStr
+          });
+        if (!insertErr) setStreak(1);
+        return;
+      }
+
+      const lastActive = data.last_active_date;
+      if (lastActive === todayStr) {
+        // Already active today, just set streak
+        setStreak(data.current_streak);
+        return;
+      }
+
+      // Check if active yesterday
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+      let newStreak = 1;
+      if (lastActive === yesterdayStr) {
+        newStreak = data.current_streak + 1;
+      }
+
+      const longestStreak = Math.max(newStreak, data.longest_streak || 0);
+
+      const { error: updateErr } = await supabase
+        .from('user_streaks')
+        .update({
+          current_streak: newStreak,
+          longest_streak: longestStreak,
+          last_active_date: todayStr
+        })
+        .eq('user_id', userId);
+
+      if (!updateErr) setStreak(newStreak);
+    } catch (err) {
+      console.error('Streak exception:', err);
+    }
+  };
+
   const isVIP = user?.subscription_status === 'VIP' || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   return (
-    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, login, signup, logout, refreshUser, updateProfile, updatePassword }}>
+    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn }}>
       {children}
     </UserContext.Provider>
   );

@@ -111,7 +111,9 @@ export default function ProfileScreen() {
   const pendingPayment = payments.find(p => p.status === 'pending');
   const menuItems = [
     { icon: 'create', label: 'Edit Profile', color: COLORS.primary, onPress: () => router.push('/edit-profile') },
-    { icon: 'stats-chart', label: 'My Performance', color: COLORS.green, onPress: () => router.push('/analytics') }, // <--- Add this line here
+    { icon: 'bookmark', label: 'My Saved Items', color: COLORS.gold, onPress: () => router.push('/bookmarks') },
+    { icon: 'albums', label: 'Revision Flashcards', color: COLORS.primary, onPress: () => router.push('/flashcards') },
+    { icon: 'stats-chart', label: 'My Performance', color: COLORS.green, onPress: () => router.push('/analytics') },
     { icon: 'document-text', label: 'My Papers', color: COLORS.green, onPress: () => router.push('/papers') },
     { icon: 'help-circle', label: 'My Quizzes', color: COLORS.accent, onPress: () => router.push('/quizzes') },
     { icon: 'card', label: 'Payment & Billing', color: COLORS.gold, onPress: () => router.push('/payment') },

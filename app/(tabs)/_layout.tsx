@@ -61,6 +61,26 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="flashcards"
+        options={{
+          title: 'Cards',
+          href: null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="albums" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="bookmarks"
+        options={{
+          title: 'Saved',
+          href: null,
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bookmark" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
         name="analytics"
         options={{
           title: 'Progress',

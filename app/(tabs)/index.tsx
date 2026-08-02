@@ -18,11 +18,23 @@ import { supabase } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { user, isVIP } = useUser();
+  const { user, isVIP, streak } = useUser();
   const router = useRouter();
   const [authVisible, setAuthVisible] = useState(false);
   const [paperCount, setPaperCount] = useState(0);
   const [quizCount, setQuizCount] = useState(0);
+
+  // Exam Countdown (Assume Nov 1st of current year)
+  const calculateDaysToExam = () => {
+    const today = new Date();
+    let examDate = new Date(today.getFullYear(), 10, 1); // Nov 1st (0-indexed month 10)
+    if (today > examDate) {
+      examDate = new Date(today.getFullYear() + 1, 10, 1);
+    }
+    const diffTime = Math.abs(examDate.getTime() - today.getTime());
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  };
+  const daysToExam = calculateDaysToExam();
 
   useEffect(() => {
     fetchCounts();
@@ -43,6 +55,22 @@ export default function HomeScreen() {
   ];
 
   const features = [
+    {
+      icon: 'albums',
+      title: 'Revision Flashcards',
+      description: 'Active recall study cards tailored to your selected subjects.',
+      color: COLORS.primary,
+      bg: COLORS.primaryLight + '30',
+      action: () => router.push('/flashcards'),
+    },
+    {
+      icon: 'bookmark',
+      title: 'Saved Items',
+      description: 'Quickly access all your bookmarked papers and quizzes.',
+      color: COLORS.gold,
+      bg: COLORS.goldLight,
+      action: () => router.push('/bookmarks'),
+    },
     {
       icon: 'document-text',
       title: 'Free Past Papers',
@@ -74,7 +102,7 @@ export default function HomeScreen() {
       description: 'Monitor your performance and see which topics need more practice.',
       color: COLORS.primary,
       bg: '#EDE9FE',
-      action: () => router.push('/profile'),
+      action: () => router.push('/analytics'),
     },
   ];
 
@@ -149,6 +177,31 @@ export default function HomeScreen() {
           </View>
         </View>
 
+        {/* Streak & Countdown Widget */}
+        <View style={styles.widgetContainer}>
+          <View style={styles.widgetCard}>
+            <View style={styles.widgetItem}>
+              <View style={[styles.widgetIconBg, { backgroundColor: COLORS.gold + '20' }]}>
+                <Ionicons name="flame" size={24} color={COLORS.gold} />
+              </View>
+              <View>
+                <Text style={styles.widgetValue}>{streak} {streak === 1 ? 'Day' : 'Days'}</Text>
+                <Text style={styles.widgetLabel}>Study Streak</Text>
+              </View>
+            </View>
+            <View style={styles.widgetDivider} />
+            <View style={styles.widgetItem}>
+              <View style={[styles.widgetIconBg, { backgroundColor: COLORS.primary + '20' }]}>
+                <Ionicons name="calendar" size={24} color={COLORS.primary} />
+              </View>
+              <View>
+                <Text style={styles.widgetValue}>{daysToExam} Days</Text>
+                <Text style={styles.widgetLabel}>Until Exams</Text>
+              </View>
+            </View>
+          </View>
+        </View>
+
         {/* Stats Row */}
         <View style={styles.statsContainer}>
           <View style={styles.statsRow}>
@@ -162,6 +215,27 @@ export default function HomeScreen() {
               </View>
             ))}
           </View>
+        </View>
+
+        {/* AI Tutor Banner */}
+        <View style={styles.section}>
+          <TouchableOpacity 
+            style={styles.aiTutorBanner} 
+            onPress={() => router.push('/tutor')}
+            activeOpacity={0.8}
+          >
+            <View style={styles.aiTutorContent}>
+              <View style={styles.aiTutorHeader}>
+                <Ionicons name="sparkles" size={18} color={COLORS.gold} />
+                <Text style={styles.aiTutorTag}>NEW FEATURE</Text>
+              </View>
+              <Text style={styles.aiTutorTitle}>Ask NamTutor AI</Text>
+              <Text style={styles.aiTutorDesc}>Get 24/7 instant help with past papers, topics, and study tips.</Text>
+            </View>
+            <View style={styles.aiTutorIconContainer}>
+              <Ionicons name="chatbubbles" size={32} color={COLORS.primary} />
+            </View>
+          </TouchableOpacity>
         </View>
 
         {/* Features Section */}
@@ -449,6 +523,49 @@ const styles = StyleSheet.create({
     ...FONTS.bodyBold,
     color: COLORS.white,
   },
+  
+  // Widget Styles
+  widgetContainer: {
+    paddingHorizontal: SPACING.xl,
+    marginTop: -SPACING.xl, // Pull it up to overlap hero
+    marginBottom: SPACING.lg,
+    zIndex: 10,
+  },
+  widgetCard: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.md,
+    ...SHADOWS.md,
+    alignItems: 'center',
+  },
+  widgetItem: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+  },
+  widgetIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  widgetValue: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+  },
+  widgetLabel: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+  },
+  widgetDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: COLORS.borderLight,
+  },
   // Stats
   statsContainer: {
     marginTop: -20,
@@ -497,6 +614,53 @@ const styles = StyleSheet.create({
     color: COLORS.textSecondary,
     marginBottom: SPACING.xl,
   },
+  
+  // AI Tutor Banner
+  aiTutorBanner: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.primaryDark,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    ...SHADOWS.md,
+    overflow: 'hidden',
+  },
+  aiTutorContent: {
+    flex: 1,
+    paddingRight: SPACING.lg,
+  },
+  aiTutorHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.xs,
+  },
+  aiTutorTag: {
+    ...FONTS.caption,
+    color: COLORS.gold,
+    fontWeight: '800',
+    letterSpacing: 1,
+  },
+  aiTutorTitle: {
+    ...FONTS.h2,
+    color: COLORS.white,
+    marginBottom: SPACING.xs,
+  },
+  aiTutorDesc: {
+    ...FONTS.small,
+    color: 'rgba(255,255,255,0.8)',
+    lineHeight: 18,
+  },
+  aiTutorIconContainer: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...SHADOWS.sm,
+  },
+
   // Features
   featureCard: {
     flexDirection: 'row',

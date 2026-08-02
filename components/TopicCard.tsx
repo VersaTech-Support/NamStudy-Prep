@@ -28,10 +28,12 @@ interface TopicCardProps {
   gradeLevel: string;
   isVIP: boolean;
   freeAttemptsLeft?: number;
+  isBookmarked?: boolean;
   onPress: () => void;
+  onToggleBookmark?: () => void;
 }
 
-export default function TopicCard({ topicName, questionCount, gradeLevel, isVIP, freeAttemptsLeft = 3, onPress }: TopicCardProps) {
+export default function TopicCard({ topicName, questionCount, gradeLevel, isVIP, freeAttemptsLeft = 3, isBookmarked, onPress, onToggleBookmark }: TopicCardProps) {
   const topicStyle = TOPIC_ICONS[topicName] || { icon: 'help-circle', color: COLORS.primary, bg: COLORS.primaryLight + '30' };
 
   return (
@@ -40,16 +42,32 @@ export default function TopicCard({ topicName, questionCount, gradeLevel, isVIP,
         <View style={[styles.iconContainer, { backgroundColor: topicStyle.bg }]}>
           <Ionicons name={topicStyle.icon as any} size={24} color={topicStyle.color} />
         </View>
-        {!isVIP && (
-          <View style={styles.freeBadge}>
-            <Text style={styles.freeBadgeText}>{freeAttemptsLeft} free</Text>
-          </View>
-        )}
-        {isVIP && (
-          <View style={styles.vipBadge}>
-            <Ionicons name="infinite" size={14} color={COLORS.gold} />
-          </View>
-        )}
+        <View style={styles.topRight}>
+          {onToggleBookmark && (
+            <TouchableOpacity
+              style={styles.bookmarkBtn}
+              onPress={onToggleBookmark}
+              activeOpacity={0.6}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Ionicons
+                name={isBookmarked ? 'heart' : 'heart-outline'}
+                size={20}
+                color={isBookmarked ? '#EF4444' : COLORS.textMuted}
+              />
+            </TouchableOpacity>
+          )}
+          {!isVIP && (
+            <View style={styles.freeBadge}>
+              <Text style={styles.freeBadgeText}>{freeAttemptsLeft} free</Text>
+            </View>
+          )}
+          {isVIP && (
+            <View style={styles.vipBadge}>
+              <Ionicons name="infinite" size={14} color={COLORS.gold} />
+            </View>
+          )}
+        </View>
       </View>
 
       <Text style={styles.topicName}>{topicName}</Text>
@@ -96,6 +114,14 @@ const styles = StyleSheet.create({
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  topRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  bookmarkBtn: {
+    padding: 4,
   },
   freeBadge: {
     backgroundColor: COLORS.surfaceAlt,
