@@ -1,6 +1,7 @@
 import { Stack } from "expo-router";
 import { UserProvider } from "@/context/UserContext";
 import { StatusBar } from "expo-status-bar";
+import UpdatePrompt from "@/components/UpdatePrompt";
 
 // Polyfill fetch to prevent Supabase from trying to import @supabase/node-fetch
 if (typeof globalThis.fetch === 'undefined') {
@@ -12,6 +13,7 @@ export default function RootLayout() {
   return (
     <UserProvider>
       <StatusBar style="light" />
+      <UpdatePrompt />
       <Stack screenOptions={{ headerShown: false }}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen

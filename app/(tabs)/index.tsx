@@ -220,14 +220,15 @@ export default function HomeScreen() {
         {/* AI Tutor Banner */}
         <View style={styles.section}>
           <TouchableOpacity 
-            style={styles.aiTutorBanner} 
+            style={[styles.aiTutorBanner, { opacity: 0.6 }]} 
             onPress={() => router.push('/tutor')}
-            activeOpacity={0.8}
+            activeOpacity={1}
+            disabled={true}
           >
             <View style={styles.aiTutorContent}>
               <View style={styles.aiTutorHeader}>
-                <Ionicons name="sparkles" size={18} color={COLORS.gold} />
-                <Text style={styles.aiTutorTag}>NEW FEATURE</Text>
+                <Ionicons name="time" size={18} color={COLORS.gold} />
+                <Text style={[styles.aiTutorTag, { color: COLORS.gold }]}>COMING SOON</Text>
               </View>
               <Text style={styles.aiTutorTitle}>Ask NamTutor AI</Text>
               <Text style={styles.aiTutorDesc}>Get 24/7 instant help with past papers, topics, and study tips.</Text>

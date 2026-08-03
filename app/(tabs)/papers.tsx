@@ -15,6 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import { getCacheData, setCacheData } from '@/lib/cache';
 import PaperCard from '@/components/PaperCard';
 import UpgradeModal from '@/components/UpgradeModal';
 import AuthModal from '@/components/AuthModal';
@@ -41,6 +42,7 @@ export default function PapersScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [authVisible, setAuthVisible] = useState(false);
+  const [isOfflineError, setIsOfflineError] = useState(false);
 
   useEffect(() => {
     const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
@@ -54,33 +56,51 @@ export default function PapersScreen() {
   }, [user]);
 
   const fetchPapers = async () => {
-    setLoading(true);
-
-    let query = supabase
-      .from('papers')
-      .select('*')
-      .order('year', { ascending: false })
-      .order('paper_number', { ascending: true });
-
-    const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
-
-    if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
-      query = query.in('subject', user.subjects);
+    const cachedPapers = await getCacheData('papers_list');
+    if (cachedPapers && cachedPapers.length > 0) {
+      setPapers(cachedPapers);
+      setLoading(false);
+    } else {
+      setLoading(true);
     }
 
-    if (user && !userIsAdmin && user.grade_level) {
-      query = query.eq('grade_level', user.grade_level);
+    try {
+      let query = supabase
+        .from('papers')
+        .select('*')
+        .order('year', { ascending: false })
+        .order('paper_number', { ascending: true });
+
+      const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+
+      if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
+        query = query.in('subject', user.subjects);
+      }
+
+      if (user && !userIsAdmin && user.grade_level) {
+        query = query.eq('grade_level', user.grade_level);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching papers:', error.message);
+        if (!cachedPapers || cachedPapers.length === 0) {
+          setIsOfflineError(true);
+        }
+      } else if (data) {
+        setPapers(data);
+        await setCacheData('papers_list', data);
+        setIsOfflineError(false);
+      }
+    } catch (err) {
+      console.error('Fetch exception:', err);
+      if (!cachedPapers || cachedPapers.length === 0) {
+        setIsOfflineError(true);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching papers:', error.message);
-    } else if (data) {
-      setPapers(data);
-    }
-
-    setLoading(false);
   };
 
   const filteredPapers = papers.filter(p => {
@@ -245,9 +265,19 @@ export default function PapersScreen() {
           </View>
         ) : filteredPapers.length === 0 ? (
           <View style={styles.emptyContainer}>
-            <Ionicons name="document-text-outline" size={48} color={COLORS.textMuted} />
-            <Text style={styles.emptyTitle}>No Papers Found</Text>
-            <Text style={styles.emptyText}>Try adjusting your filters or search query</Text>
+            <Ionicons 
+              name={isOfflineError ? "cloud-offline-outline" : "document-text-outline"} 
+              size={48} 
+              color={COLORS.textMuted} 
+            />
+            <Text style={styles.emptyTitle}>
+              {isOfflineError ? "Offline Mode" : "No Papers Found"}
+            </Text>
+            <Text style={styles.emptyText}>
+              {isOfflineError 
+                ? "Connect to the internet to download your first study materials." 
+                : "Try adjusting your filters or search query"}
+            </Text>
           </View>
         ) : (
           <View style={styles.papersList}>

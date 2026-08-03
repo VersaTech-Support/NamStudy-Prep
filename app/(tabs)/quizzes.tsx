@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import { getCacheData, setCacheData } from '@/lib/cache';
 import TopicCard from '@/components/TopicCard';
 import UpgradeModal from '@/components/UpgradeModal';
 import AuthModal from '@/components/AuthModal';
@@ -34,44 +35,63 @@ export default function QuizzesScreen() {
   const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [authVisible, setAuthVisible] = useState(false);
   const [freeAttempts, setFreeAttempts] = useState<Record<string, number>>({});
+  const [isOfflineError, setIsOfflineError] = useState(false);
 
   useEffect(() => {
     fetchTopics();
   }, [user]);
 
   const fetchTopics = async () => {
-    setLoading(true);
-
-    let query = supabase
-      .from('quizzes')
-      .select('topic_name, grade_level, subject');
-
-    const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
-
-    if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
-      query = query.in('subject', user.subjects);
+    const cachedTopics = await getCacheData('quizzes_list');
+    if (cachedTopics && cachedTopics.length > 0) {
+      setTopics(cachedTopics);
+      setLoading(false);
+    } else {
+      setLoading(true);
     }
 
-    const { data, error } = await query;
-    
-    if (data) {
-      const topicMap: Record<string, TopicSummary> = {};
-      data.forEach((q: any) => {
-        const sub = q.subject || 'Mathematics';
-        const key = `${q.topic_name}-${q.grade_level}-${sub}`;
-        if (!topicMap[key]) {
-          topicMap[key] = {
-            topicName: q.topic_name,
-            questionCount: 0,
-            gradeLevel: q.grade_level,
-            subject: sub,
-          };
-        }
-        topicMap[key].questionCount++;
-      });
-      setTopics(Object.values(topicMap));
+    try {
+      let query = supabase
+        .from('quizzes')
+        .select('topic_name, grade_level, subject');
+
+      const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+
+      if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
+        query = query.in('subject', user.subjects);
+      }
+
+      const { data, error } = await query;
+      
+      if (error) {
+        console.error('Error fetching topics:', error.message);
+        if (!cachedTopics || cachedTopics.length === 0) setIsOfflineError(true);
+      } else if (data) {
+        const topicMap: Record<string, TopicSummary> = {};
+        data.forEach((q: any) => {
+          const sub = q.subject || 'Mathematics';
+          const key = `${q.topic_name}-${q.grade_level}-${sub}`;
+          if (!topicMap[key]) {
+            topicMap[key] = {
+              topicName: q.topic_name,
+              questionCount: 0,
+              gradeLevel: q.grade_level,
+              subject: sub,
+            };
+          }
+          topicMap[key].questionCount++;
+        });
+        const topicsArr = Object.values(topicMap);
+        setTopics(topicsArr);
+        await setCacheData('quizzes_list', topicsArr);
+        setIsOfflineError(false);
+      }
+    } catch (err) {
+      console.error('Fetch topics exception:', err);
+      if (!cachedTopics || cachedTopics.length === 0) setIsOfflineError(true);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const filteredTopics = topics.filter(t => {
@@ -203,6 +223,22 @@ export default function QuizzesScreen() {
             <ActivityIndicator size="large" color={COLORS.primary} />
             <Text style={styles.loadingText}>Loading topics...</Text>
           </View>
+        ) : filteredTopics.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons 
+              name={isOfflineError ? "cloud-offline-outline" : "help-circle-outline"} 
+              size={48} 
+              color={COLORS.textMuted} 
+            />
+            <Text style={styles.emptyTitle}>
+              {isOfflineError ? "Offline Mode" : "No Quizzes Found"}
+            </Text>
+            <Text style={styles.emptyText}>
+              {isOfflineError 
+                ? "Connect to the internet to download your first study materials." 
+                : "Try adjusting your filters"}
+            </Text>
+          </View>
         ) : (
           <View style={styles.topicsGrid}>
             {filteredTopics.map((topic) => {
@@ -294,6 +330,9 @@ const styles = StyleSheet.create({
   topicsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
   loadingContainer: { alignItems: 'center', paddingVertical: 60 },
   loadingText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.md },
+  emptyContainer: { alignItems: 'center', paddingVertical: 60 },
+  emptyTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md },
+  emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs, textAlign: 'center', paddingHorizontal: 20 },
   howItWorks: { marginHorizontal: SPACING.xl, marginTop: SPACING.xxxl, backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.xl, ...SHADOWS.sm },
   howTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.lg },
   howStep: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: SPACING.lg },

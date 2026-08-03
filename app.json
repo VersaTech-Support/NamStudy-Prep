@@ -29,20 +29,24 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/icon.png",
+          "image": "./assets/images/splash.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#581C87"
         }
       ],
       "expo-font",
-      "expo-web-browser"
+      "expo-web-browser",
+      "expo-updates"
     ],
+    "updates": {
+      "url": "https://u.expo.dev/7d65cb4d-f2bc-4f80-8525-9feed55f21f9"
+    },
     "experiments": {
       "typedRoutes": true
     },
     "runtimeVersion": {
-      "policy": "sdkVersion"
+      "policy": "appVersion"
     },
     "extra": {
       "router": {},

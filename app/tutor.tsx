@@ -272,14 +272,26 @@ export default function TutorScreen() {
             onChangeText={setInputText}
             multiline
             maxLength={500}
+            editable={false}
           />
           <TouchableOpacity 
-            style={[styles.sendBtn, !inputText.trim() && styles.sendBtnDisabled]} 
+            style={[styles.sendBtn, styles.sendBtnDisabled]} 
             onPress={handleSend}
-            disabled={!inputText.trim()}
+            disabled={true}
           >
             <Ionicons name="send" size={18} color={COLORS.white} />
           </TouchableOpacity>
+        </View>
+
+        {/* Coming Soon Overlay */}
+        <View style={styles.overlay}>
+          <View style={styles.overlayIconContainer}>
+            <Ionicons name="lock-closed" size={48} color={COLORS.primary} />
+          </View>
+          <Text style={styles.overlayTitle}>Coming Soon</Text>
+          <Text style={styles.overlaySubtitle}>
+            We are putting the final touches on NamTutor AI. Get ready for your ultimate 24/7 Namibian study companion!
+          </Text>
         </View>
       </KeyboardAvoidingView>
     </View>
@@ -362,4 +374,37 @@ const styles = StyleSheet.create({
     ...SHADOWS.sm 
   },
   sendBtnDisabled: { backgroundColor: COLORS.borderLight, shadowOpacity: 0 },
+  overlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.75)',
+    zIndex: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: SPACING.xxxl,
+  },
+  overlayIconContainer: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: COLORS.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+    ...SHADOWS.md,
+  },
+  overlayTitle: {
+    ...FONTS.h2,
+    color: COLORS.primaryDark,
+    marginBottom: SPACING.md,
+  },
+  overlaySubtitle: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
 });
