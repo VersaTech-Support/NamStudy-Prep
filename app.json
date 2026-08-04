@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "NamStudy Prep",
-    "slug": "namstudy-prep",
+    "slug": "education-exams-math",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -17,7 +17,7 @@
         "backgroundColor": "#581C87"
       },
       "edgeToEdgeEnabled": true,
-      "package": "com.namstudy.prep"
+      "package": "com.versatech.namstudyprep"
     },
     "web": {
       "bundler": "metro",
