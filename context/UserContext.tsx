@@ -1,4 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { Platform } from 'react-native';
+import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { supabase } from '@/lib/supabase';
 
 interface UserProfile {
@@ -31,6 +33,7 @@ interface UserContextType {
   loading: boolean;
   bookmarks: Bookmark[];
   streak: number;
+  customerInfo: CustomerInfo | null;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS') => Promise<boolean>;
   updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
@@ -39,6 +42,7 @@ interface UserContextType {
   refreshUser: () => Promise<void>;
   toggleBookmark: (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => Promise<void>;
   isBookmarked: (item_id: string) => boolean;
+  manageSubscriptions: () => Promise<void>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -48,21 +52,44 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [streak, setStreak] = useState(0);
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
 
   useEffect(() => {
+    if (Platform.OS === 'android') {
+      Purchases.configure({ apiKey: 'test_oSVyOEnHjEbvrqVFIuuoXvqdhkR' });
+    }
+
+    const customerInfoListener = (info: CustomerInfo) => {
+      setCustomerInfo(info);
+    };
+    Purchases.addCustomerInfoUpdateListener(customerInfoListener);
+
     checkSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         await fetchUserProfile(session.user.id);
+        try {
+          const { customerInfo } = await Purchases.logIn(session.user.id);
+          setCustomerInfo(customerInfo);
+        } catch (e) {
+          console.error('RevenueCat logIn error:', e);
+        }
       } else {
         setUser(null);
+        setCustomerInfo(null);
+        try {
+          await Purchases.logOut();
+        } catch (e) {
+          console.error('RevenueCat logOut error:', e);
+        }
       }
       setLoading(false);
     });
 
     return () => {
       subscription.unsubscribe();
+      Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
     };
   }, []);
 
@@ -71,6 +98,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
         await fetchUserProfile(session.user.id);
+        try {
+          const { customerInfo } = await Purchases.logIn(session.user.id);
+          setCustomerInfo(customerInfo);
+        } catch (e) {
+          console.error('RevenueCat logIn error:', e);
+        }
       }
     } catch (error) {
       console.error('Session check error:', error);
@@ -242,7 +275,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const logout = async () => {
     await supabase.auth.signOut();
+    try {
+      await Purchases.logOut();
+    } catch (e) {
+      console.error('RevenueCat logOut error:', e);
+    }
     setUser(null);
+    setCustomerInfo(null);
     setBookmarks([]);
   };
 
@@ -358,11 +397,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const isVIP = user?.subscription_status === 'VIP' || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
+  const manageSubscriptions = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        await Purchases.showManageSubscriptions();
+      }
+    } catch (error) {
+      console.error('Error opening subscription management:', error);
+    }
+  };
+
+  const hasRevenueCatVIP = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
+  const isVIP = user?.subscription_status === 'VIP' || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false) || hasRevenueCatVIP;
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   return (
-    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn }}>
+    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions }}>
       {children}
     </UserContext.Provider>
   );

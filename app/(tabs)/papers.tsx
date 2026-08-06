@@ -12,6 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -34,13 +35,13 @@ interface Paper {
 
 export default function PapersScreen() {
   const { user, isVIP, toggleBookmark, isBookmarked } = useUser();
+  const router = useRouter();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
   const [gradeFilter, setGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS'>('All');
   const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
-  const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [authVisible, setAuthVisible] = useState(false);
   const [isOfflineError, setIsOfflineError] = useState(false);
 
@@ -143,13 +144,14 @@ export default function PapersScreen() {
       return;
     }
     if (!isVIP) {
-      setUpgradeVisible(true);
+      router.push('/payment');
       return;
     }
     if (paper.solution_pdf_url) {
-      Linking.openURL(paper.solution_pdf_url).catch(() => {
-        Alert.alert('Solution', `Opening step-by-step solution for: ${paper.title}`);
-      });
+      router.push({
+        pathname: '/secure-viewer',
+        params: { filePath: paper.solution_pdf_url }
+      } as any);
     }
   };
 
@@ -298,7 +300,6 @@ export default function PapersScreen() {
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      <UpgradeModal visible={upgradeVisible} onClose={() => setUpgradeVisible(false)} />
       <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
     </View>
   );

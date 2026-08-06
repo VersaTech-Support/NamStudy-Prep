@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import RevenueCatUI from 'react-native-purchases-ui';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -40,7 +41,7 @@ const BANK_DETAILS = {
 };
 
 export default function PaymentScreen() {
-  const { user, isVIP } = useUser();
+  const { user, isVIP, customerInfo, manageSubscriptions } = useUser();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -48,12 +49,49 @@ export default function PaymentScreen() {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [paymentHistory, setPaymentHistory] = useState<Payment[]>([]);
   const [loadingHistory, setLoadingHistory] = useState(true);
+  const [showBankTransfer, setShowBankTransfer] = useState(false);
+  const [paywallLoading, setPaywallLoading] = useState(false);
 
   // Subscription plan selection state
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
 
   const amount = selectedPlan === 'monthly' ? 30 : 300;
   const planTitleText = selectedPlan === 'monthly' ? 'VIP Monthly Access' : 'VIP Yearly Access (Best Value)';
+
+  const hasRevenueCatSub = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
+
+  const handlePresentPaywall = async () => {
+    setPaywallLoading(true);
+    try {
+      const result = await RevenueCatUI.presentPaywallIfNeeded({
+        requiredEntitlementIdentifier: 'NamibStudy Prep Pro',
+      });
+
+      if (result === 'PURCHASED' || result === 'RESTORED') {
+        Alert.alert(
+          '🎉 Welcome to Pro!',
+          'Your NamibStudy Prep Pro access has been activated instantly. Enjoy all premium features!',
+          [{ text: 'Awesome!', onPress: () => router.back() }]
+        );
+      } else if (result === 'NOT_PRESENTED') {
+        Alert.alert(
+          'Already Active',
+          'You already have NamibStudy Prep Pro access!',
+          [{ text: 'OK', onPress: () => router.back() }]
+        );
+      }
+      // 'CANCELLED' or 'ERROR' – user dismissed, do nothing
+    } catch (error: any) {
+      console.error('Paywall error:', error);
+      Alert.alert(
+        'Something went wrong',
+        'We couldn\'t open the subscription page. You can try again or use the bank transfer option below.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setPaywallLoading(false);
+    }
+  };
 
   useEffect(() => {
     if (user) {
@@ -256,6 +294,18 @@ export default function PaymentScreen() {
             </TouchableOpacity>
           </View>
 
+          {hasRevenueCatSub && (
+            <TouchableOpacity
+              style={styles.manageSubBtn}
+              onPress={manageSubscriptions}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="settings-outline" size={18} color={COLORS.accent} />
+              <Text style={styles.manageSubBtnText}>Manage Google Play Subscription</Text>
+              <Ionicons name="open-outline" size={16} color={COLORS.accent} />
+            </TouchableOpacity>
+          )}
+
           {paymentHistory.length > 0 && (
             <View style={styles.historySection}>
               <Text style={styles.historySectionTitle}>Payment History</Text>
@@ -331,8 +381,83 @@ export default function PaymentScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Step 1: Info & Plan Selector */}
-        {step === 'info' && (
+        {step === 'info' && !showBankTransfer && (
           <View>
+            {/* ── Features Card (shown first) ── */}
+            <View style={styles.featuresCard}>
+              <Text style={styles.featuresCardTitle}>What you'll get with Pro:</Text>
+              {[
+                { icon: 'document-text', text: 'Step-by-step worked solutions for ALL papers' },
+                { icon: 'infinite', text: 'Unlimited topic quiz attempts' },
+                { icon: 'analytics', text: 'Detailed performance analytics' },
+                { icon: 'school', text: 'Exam tips and strategies' },
+                { icon: 'notifications', text: 'New paper alerts' },
+              ].map((f, i) => (
+                <View key={i} style={styles.featureItem}>
+                  <View style={styles.featureCheck}>
+                    <Ionicons name={f.icon as any} size={16} color={COLORS.gold} />
+                  </View>
+                  <Text style={styles.featureItemText}>{f.text}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* ── Primary CTA: Google Play via RevenueCat Paywall ── */}
+            <TouchableOpacity
+              style={styles.paywallBtn}
+              onPress={handlePresentPaywall}
+              disabled={paywallLoading}
+              activeOpacity={0.8}
+            >
+              {paywallLoading ? (
+                <ActivityIndicator color={COLORS.white} />
+              ) : (
+                <>
+                  <Ionicons name="logo-google-playstore" size={22} color={COLORS.white} />
+                  <View style={{ marginLeft: SPACING.md, flex: 1 }}>
+                    <Text style={styles.paywallBtnTitle}>Upgrade Instantly via Google Play</Text>
+                    <Text style={styles.paywallBtnSub}>Secure checkout · Auto-renewal · Cancel anytime</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color={COLORS.white} />
+                </>
+              )}
+            </TouchableOpacity>
+
+            {/* ── Divider ── */}
+            <View style={styles.orDivider}>
+              <View style={styles.orLine} />
+              <Text style={styles.orText}>OR</Text>
+              <View style={styles.orLine} />
+            </View>
+
+            {/* ── Secondary CTA: Manual Bank Transfer ── */}
+            <TouchableOpacity
+              style={styles.bankTransferBtn}
+              onPress={() => setShowBankTransfer(true)}
+              activeOpacity={0.8}
+            >
+              <Ionicons name="business-outline" size={20} color={COLORS.accent} />
+              <View style={{ marginLeft: SPACING.md, flex: 1 }}>
+                <Text style={styles.bankTransferBtnTitle}>Prefer an FNB Bank Transfer?</Text>
+                <Text style={styles.bankTransferBtnSub}>Manual payment · Verified within 24 hours</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.accent} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ── Bank Transfer Flow (Step 1: Plan selection) ── */}
+        {step === 'info' && showBankTransfer && (
+          <View>
+            <TouchableOpacity
+              style={styles.backToPrimary}
+              onPress={() => setShowBankTransfer(false)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="arrow-back" size={16} color={COLORS.primary} />
+              <Text style={styles.backToPrimaryText}>Back to upgrade options</Text>
+            </TouchableOpacity>
+
             <Text style={styles.sectionHeading}>Choose Your Subscription Plan</Text>
             <View style={styles.planSelectorRow}>
               <TouchableOpacity
@@ -371,26 +496,8 @@ export default function PaymentScreen() {
               </View>
             </View>
 
-            <View style={styles.featuresCard}>
-              <Text style={styles.featuresCardTitle}>What you'll get with VIP:</Text>
-              {[
-                { icon: 'document-text', text: 'Step-by-step worked solutions for ALL papers' },
-                { icon: 'infinite', text: 'Unlimited topic quiz attempts' },
-                { icon: 'analytics', text: 'Detailed performance analytics' },
-                { icon: 'school', text: 'Exam tips and strategies' },
-                { icon: 'notifications', text: 'New paper alerts' },
-              ].map((f, i) => (
-                <View key={i} style={styles.featureItem}>
-                  <View style={styles.featureCheck}>
-                    <Ionicons name={f.icon as any} size={16} color={COLORS.gold} />
-                  </View>
-                  <Text style={styles.featureItemText}>{f.text}</Text>
-                </View>
-              ))}
-            </View>
-
             <View style={styles.howItWorksCard}>
-              <Text style={styles.howItWorksTitle}>How Payment Works</Text>
+              <Text style={styles.howItWorksTitle}>How Bank Transfer Works</Text>
               <View style={styles.howStep}>
                 <View style={[styles.howStepDot, { backgroundColor: COLORS.primary + '15' }]}>
                   <Text style={[styles.howStepDotText, { color: COLORS.primary }]}>1</Text>
@@ -831,4 +938,58 @@ const styles = StyleSheet.create({
   historyDate: { ...FONTS.small, color: COLORS.textMuted },
   adminNoteBox: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginTop: SPACING.sm, backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm },
   adminNoteText: { ...FONTS.small, color: COLORS.textSecondary, flex: 1 },
+
+  // ── RevenueCat Paywall & Bank Transfer toggle styles ──
+  paywallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.green,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 18,
+    paddingHorizontal: SPACING.xl,
+    marginBottom: SPACING.md,
+    ...SHADOWS.xl,
+  },
+  paywallBtnTitle: { ...FONTS.bodyBold, color: COLORS.white, fontSize: 16 },
+  paywallBtnSub: { ...FONTS.small, color: 'rgba(255,255,255,0.8)', marginTop: 2 },
+  orDivider: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginVertical: SPACING.md,
+  },
+  orLine: { flex: 1, height: 1, backgroundColor: COLORS.border },
+  orText: { ...FONTS.caption, color: COLORS.textMuted, marginHorizontal: SPACING.lg },
+  bankTransferBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    paddingVertical: 16,
+    paddingHorizontal: SPACING.xl,
+    borderWidth: 1.5,
+    borderColor: COLORS.accent + '40',
+    ...SHADOWS.sm,
+  },
+  bankTransferBtnTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, fontSize: 14 },
+  bankTransferBtnSub: { ...FONTS.small, color: COLORS.textMuted, marginTop: 2 },
+  backToPrimary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+    marginBottom: SPACING.lg,
+  },
+  backToPrimaryText: { ...FONTS.caption, color: COLORS.primary },
+  manageSubBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.accent + '10',
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    paddingHorizontal: SPACING.lg,
+    marginBottom: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.accent + '25',
+  },
+  manageSubBtnText: { ...FONTS.caption, color: COLORS.accent, flex: 1 },
 });
