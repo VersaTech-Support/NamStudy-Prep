@@ -209,7 +209,7 @@ export default function PaymentScreen() {
         if (typeof navigator !== 'undefined' && (navigator as any).clipboard) {
           (navigator as any).clipboard.writeText(text);
         }
-      } catch {}
+      } catch { }
     }
     setCopiedField(field);
     setTimeout(() => setCopiedField(null), 2000);
