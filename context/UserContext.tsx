@@ -56,7 +56,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (Platform.OS === 'android') {
-      Purchases.configure({ apiKey: 'test_oSVyOEnHjEbvrqVFIuuoXvqdhkR' });
+      Purchases.configure({ apiKey: 'goog_tJlncTghUDnHSBUfHKUcvVEFEAK' });
     }
 
     const customerInfoListener = (info: CustomerInfo) => {
