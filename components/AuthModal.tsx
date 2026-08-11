@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -37,6 +37,18 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const [schools, setSchools] = useState<{ id: string; name: string }[]>([]);
+  const [schoolId, setSchoolId] = useState<string | null>(null);
+  const [customSchoolName, setCustomSchoolName] = useState('');
+
+  useEffect(() => {
+    if (visible && !isLogin) {
+      supabase.from('schools').select('id, name').order('name').then(({ data }) => {
+        if (data) setSchools(data);
+      });
+    }
+  }, [visible, isLogin]);
+
   const handleSubmit = async () => {
     setError('');
     if (!email.trim()) {
@@ -65,7 +77,9 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
         }
       } else {
         // Passing password to signup function
-        const success = await signup(name, email, password, gradeLevel, role);
+        const finalSchoolName = schoolId === 'other' ? customSchoolName : null;
+        const finalSchoolId = schoolId === 'other' ? null : schoolId;
+        const success = await signup(name, email, password, gradeLevel, role, finalSchoolId, finalSchoolName);
         if (success) {
           setShowOtp(true);
           setError('');
@@ -116,6 +130,8 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
     setShowPassword(false);
     setGradeLevel('NSSCO');
     setRole('student');
+    setSchoolId(null);
+    setCustomSchoolName('');
   };
 
   const handleClose = () => {
@@ -322,6 +338,49 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
                           <Text style={styles.gradeSubtitle}>Grade 12</Text>
                         </View>
                       </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {/* School Selection (Signup Only) */}
+                {!isLogin && (
+                  <View style={styles.inputGroup}>
+                    <Text style={styles.label}>Select Your School</Text>
+                    <View style={{ gap: SPACING.xs }}>
+                      <ScrollView style={{ maxHeight: 120, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceAlt }}>
+                        {schools.map((school) => (
+                          <TouchableOpacity
+                            key={school.id}
+                            style={{ padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight, backgroundColor: schoolId === school.id ? COLORS.primary + '15' : 'transparent' }}
+                            onPress={() => setSchoolId(school.id)}
+                          >
+                            <Text style={{ ...FONTS.body, color: schoolId === school.id ? COLORS.primary : COLORS.textPrimary }}>
+                              {school.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity
+                          style={{ padding: SPACING.md, backgroundColor: schoolId === 'other' ? COLORS.primary + '15' : 'transparent' }}
+                          onPress={() => setSchoolId('other')}
+                        >
+                          <Text style={{ ...FONTS.body, color: schoolId === 'other' ? COLORS.primary : COLORS.textPrimary }}>
+                            Other / School Not Listed
+                          </Text>
+                        </TouchableOpacity>
+                      </ScrollView>
+                      
+                      {schoolId === 'other' && (
+                        <View style={[styles.inputContainer, { marginTop: SPACING.sm }]}>
+                          <Ionicons name="school-outline" size={18} color={COLORS.textMuted} />
+                          <TextInput
+                            style={styles.input}
+                            placeholder="Enter your school name"
+                            placeholderTextColor={COLORS.textMuted}
+                            value={customSchoolName}
+                            onChangeText={setCustomSchoolName}
+                          />
+                        </View>
+                      )}
                     </View>
                   </View>
                 )}

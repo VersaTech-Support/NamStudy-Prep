@@ -14,6 +14,10 @@ interface UserProfile {
   role?: string;
   avatar_url?: string | null;
   school?: string | null;
+  school_id?: string | null;
+  school_logo_url?: string | null;
+  school_locked?: boolean;
+  is_school_admin?: boolean;
   subjects?: string[];
 }
 
@@ -36,14 +40,15 @@ interface UserContextType {
   onlineUsersCount: number;
   customerInfo: CustomerInfo | null;
   login: (email: string, password: string) => Promise<boolean>;
-  signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS', role: 'student' | 'teacher') => Promise<boolean>;
-  updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
+  signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS', role: 'student' | 'teacher', schoolId?: string | null, schoolName?: string | null) => Promise<boolean>;
+  updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; school_id?: string; school_locked?: boolean; is_school_admin?: boolean; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
   toggleBookmark: (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => Promise<void>;
   isBookmarked: (item_id: string) => boolean;
   manageSubscriptions: () => Promise<void>;
+  uploadSchoolLogo: (file: { uri: string; type: string; name: string }, schoolId: string) => Promise<string | null>;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
@@ -243,7 +248,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     email: string,
     password: string,
     gradeLevel: 'NSSCO' | 'NSSCAS',
-    role: 'student' | 'teacher'
+    role: 'student' | 'teacher',
+    schoolId?: string | null,
+    schoolName?: string | null
   ): Promise<boolean> => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -254,6 +261,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             name,
             grade_level: gradeLevel,
             role,
+            school_id: schoolId || null,
+            school: schoolName || null,
+            school_locked: !!schoolId,
           },
         },
       });
@@ -277,6 +287,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     name?: string;
     grade_level?: 'NSSCO' | 'NSSCAS';
     school?: string;
+    school_id?: string;
+    school_locked?: boolean;
+    is_school_admin?: boolean;
     subjects?: string[];
     avatar_file?: { uri: string; type: string; name: string }
   }): Promise<boolean> => {
@@ -315,16 +328,19 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         avatarUrl = publicURLData.publicUrl;
       }
 
-      const updatePayload: any = {};
-      if (updatedData.name !== undefined) updatePayload.name = updatedData.name;
-      if (updatedData.grade_level !== undefined) updatePayload.grade_level = updatedData.grade_level;
-      if (updatedData.school !== undefined) updatePayload.school = updatedData.school;
-      if (updatedData.subjects !== undefined) updatePayload.subjects = updatedData.subjects; // NEW: Added to payload
-      if (avatarUrl !== undefined) updatePayload.avatar_url = avatarUrl;
+      const payload: any = {};
+      if (updatedData.name !== undefined) payload.name = updatedData.name;
+      if (updatedData.grade_level !== undefined) payload.grade_level = updatedData.grade_level;
+      if (updatedData.school !== undefined) payload.school = updatedData.school;
+      if (updatedData.school_id !== undefined) payload.school_id = updatedData.school_id;
+      if (updatedData.school_locked !== undefined) payload.school_locked = updatedData.school_locked;
+      if (updatedData.is_school_admin !== undefined) payload.is_school_admin = updatedData.is_school_admin;
+      if (updatedData.subjects !== undefined) payload.subjects = updatedData.subjects;
+      if (avatarUrl !== user.avatar_url) payload.avatar_url = avatarUrl;
 
       const { error: dbError } = await supabase
         .from('users')
-        .update(updatePayload)
+        .update(payload)
         .eq('id', user.id);
 
       if (dbError) {
@@ -488,12 +504,44 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const uploadSchoolLogo = async (file: { uri: string; type: string; name: string }, schoolId: string): Promise<string | null> => {
+    try {
+      const fileExt = file.name.split('.').pop() || 'jpg';
+      const fileName = `${schoolId}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
+
+      const response = await fetch(file.uri);
+      const blob = await response.blob();
+
+      const { error: uploadError } = await supabase.storage
+        .from('school-logos')
+        .upload(filePath, blob, { 
+          upsert: true,
+          contentType: blob.type || 'image/jpeg' 
+        });
+
+      if (uploadError) {
+        console.error('School logo upload error:', uploadError.message);
+        return null;
+      }
+
+      const { data: publicURLData } = supabase.storage
+        .from('school-logos')
+        .getPublicUrl(filePath);
+
+      return publicURLData.publicUrl;
+    } catch (err) {
+      console.error('School logo upload exception:', err);
+      return null;
+    }
+  };
+
   const hasRevenueCatVIP = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
   const isVIP = user?.subscription_status === 'VIP' || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false) || hasRevenueCatVIP;
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   return (
-    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions }}>
+    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, uploadSchoolLogo }}>
       {children}
     </UserContext.Provider>
   );

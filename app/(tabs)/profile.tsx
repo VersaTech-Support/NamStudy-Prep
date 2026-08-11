@@ -33,6 +33,7 @@ interface Payment {
 export default function ProfileScreen() {
   const { user, isVIP, isAdmin, onlineUsersCount, logout, refreshUser, updateProfile } = useUser();
   const router = useRouter();
+  const showAdminDashboard = isAdmin || user?.is_school_admin;
   const [authVisible, setAuthVisible] = useState(false);
   const [upgradeVisible, setUpgradeVisible] = useState(false);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -137,11 +138,11 @@ export default function ProfileScreen() {
                 <Text style={styles.avatarText}>{user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</Text>
               )}
             </View>
-            <View style={[styles.cameraOverlay, isAdmin && { backgroundColor: '#8A9EA7', borderColor: '#fdfdfd' }]}>
+            <View style={[styles.cameraOverlay, showAdminDashboard && { backgroundColor: '#8A9EA7', borderColor: '#fdfdfd' }]}>
               <Ionicons name="camera" size={12} color={COLORS.white} />
             </View>
-            {isVIP && !isAdmin && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
-            {isAdmin && <View style={[styles.vipBadgeSmall, { backgroundColor: '#A0B2C6' }]}><Ionicons name="shield" size={12} color={COLORS.white} /></View>}
+            {isVIP && !showAdminDashboard && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
+            {showAdminDashboard && <View style={[styles.vipBadgeSmall, { backgroundColor: '#A0B2C6' }]}><Ionicons name="shield" size={12} color={COLORS.white} /></View>}
           </TouchableOpacity>
           <Text style={styles.profileName}>{user.name}</Text>
           <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{user.email}</Text>
@@ -149,7 +150,12 @@ export default function ProfileScreen() {
             {isAdmin ? (
               <View style={[styles.profileTag, { backgroundColor: '#E5E4E2' }]}>
                 <Ionicons name="shield-checkmark" size={12} color={'#6B7A85'} />
-                <Text style={[styles.profileTagText, { color: '#6B7A85' }]}>Command Center</Text>
+                <Text style={[styles.profileTagText, { color: '#6B7A85' }]}>Super Admin</Text>
+              </View>
+            ) : user.is_school_admin ? (
+              <View style={[styles.profileTag, { backgroundColor: '#E5E4E2' }]}>
+                <Ionicons name="shield-half" size={12} color={'#6B7A85'} />
+                <Text style={[styles.profileTagText, { color: '#6B7A85' }]}>School Admin</Text>
               </View>
             ) : user.role === 'teacher' ? (
               <View style={[styles.profileTag, { backgroundColor: COLORS.accentLight }]}>
@@ -162,13 +168,26 @@ export default function ProfileScreen() {
               </View>
             )}
             
-            {!isAdmin && (
+            {!showAdminDashboard && (
               <View style={[styles.profileTag, { backgroundColor: isVIP ? COLORS.goldLight : COLORS.surfaceAlt }]}>
                 <Ionicons name={isVIP ? 'diamond' : 'person'} size={12} color={isVIP ? COLORS.gold : COLORS.textMuted} />
                 <Text style={[styles.profileTagText, { color: isVIP ? COLORS.goldDark : COLORS.textMuted }]}>{isVIP ? 'VIP Plan' : 'Free Plan'}</Text>
               </View>
             )}
           </View>
+          
+          {Boolean(user.school) && (
+            <View style={{ marginTop: SPACING.md, backgroundColor: COLORS.surfaceAlt, paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm, flexDirection: 'row', alignItems: 'center', alignSelf: 'center' }}>
+              <Ionicons name="school" size={14} color={COLORS.textSecondary} style={{ marginRight: SPACING.xs }} />
+              <Text style={{ ...FONTS.caption, color: COLORS.textSecondary, marginRight: SPACING.xs }}>{user.school}</Text>
+              {user.school_locked && <Ionicons name="lock-closed" size={12} color={COLORS.textMuted} />}
+            </View>
+          )}
+          {user.school_locked && (
+            <Text style={{ ...FONTS.small, color: COLORS.textMuted, marginTop: SPACING.xs, textAlign: 'center', opacity: 0.7 }}>
+              School is locked. Contact admin to change.
+            </Text>
+          )}
         </View>
 
         {/* Pending Payment Banner */}
@@ -186,7 +205,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Subscription */}
-        {isVIP && !isAdmin ? (
+        {isVIP && !showAdminDashboard ? (
           <View style={styles.subscriptionCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
               <View style={{ width: 44, height: 44, borderRadius: RADIUS.md, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
@@ -208,7 +227,7 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
-        ) : !pendingPayment && !isAdmin ? (
+        ) : !pendingPayment && !showAdminDashboard ? (
           <TouchableOpacity style={styles.upgradeCard} onPress={() => router.push('/payment')} activeOpacity={0.8}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
               <View style={{ width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
@@ -224,10 +243,10 @@ export default function ProfileScreen() {
         ) : null}
 
         {/* Admin Dashboard */}
-        {isAdmin && <AdminDashboard onlineUsersCount={onlineUsersCount} />}
+        {showAdminDashboard && <AdminDashboard onlineUsersCount={onlineUsersCount} />}
 
         {/* Consumer Menus */}
-        {!isAdmin && (
+        {!showAdminDashboard && (
           <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
             <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Quick Access</Text>
             {menuItems.map((item, i) => (
@@ -241,7 +260,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Recent Payments for Consumers */}
-        {payments.length > 0 && !isAdmin && (
+        {payments.length > 0 && !showAdminDashboard && (
           <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
             <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Recent Payments</Text>
             {payments.slice(0, 3).map((p) => (

@@ -10,10 +10,12 @@ import {
   ActivityIndicator,
   Platform,
   Modal,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
+import * as ImagePicker from 'expo-image-picker';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -59,16 +61,25 @@ interface PaymentRecord {
 }
 
 export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?: number }) {
-  const { user, isAdmin } = useUser();
+  const { user, isAdmin, uploadSchoolLogo } = useUser();
 
-  const [activeTab, setActiveTab] = useState<'payments' | 'papers' | 'users' | 'quizzes'>('payments');
+  const [activeTab, setActiveTab] = useState<'payments' | 'papers' | 'users' | 'quizzes' | 'schools' | 'notices' | 'timetables'>(isAdmin ? 'payments' : 'notices');
   const [filterRole, setFilterRole] = useState<'All' | 'student' | 'teacher' | 'admin'>('All');
+  const [filterSchool, setFilterSchool] = useState<string>('All');
   const [papers, setPapers] = useState<Paper[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [quizCount, setQuizCount] = useState(0);
+  const [schoolsList, setSchoolsList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // School form states
+  const [showSchoolForm, setShowSchoolForm] = useState(false);
+  const [newSchoolName, setNewSchoolName] = useState('');
+  const [newSchoolCode, setNewSchoolCode] = useState('');
+  const [newSchoolPrimaryColor, setNewSchoolPrimaryColor] = useState('#6200EE');
+  const [newSchoolAccentColor, setNewSchoolAccentColor] = useState('#03DAC6');
 
   // Paper form states
   const [showPaperForm, setShowPaperForm] = useState(false);
@@ -115,12 +126,13 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
 
   const fetchData = async () => {
     setLoading(true);
-    const [papersRes, usersRes, quizzesRes, paymentsRes, subjectsRes] = await Promise.all([
+    const [papersRes, usersRes, quizzesRes, paymentsRes, subjectsRes, schoolsRes] = await Promise.all([
       supabase.from('papers').select('*').order('year', { ascending: false }),
       supabase.from('users').select('*').order('created_at', { ascending: false }),
       supabase.from('quizzes').select('*', { count: 'exact', head: true }),
       supabase.from('payments').select('*, users(name, email, grade_level)').order('created_at', { ascending: false }),
-      supabase.from('subjects').select('name').order('name') // NEW: Fetch subjects
+      supabase.from('subjects').select('name').order('name'),
+      supabase.from('schools').select('*').order('name')
     ]);
 
     if (papersRes.data) setPapers(papersRes.data);
@@ -128,8 +140,74 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     if (quizzesRes.count !== null) setQuizCount(quizzesRes.count);
     if (paymentsRes.data) setPayments(paymentsRes.data as any);
     if (subjectsRes.data) setAvailableSubjects(subjectsRes.data.map((s: { name: string }) => s.name));
+    if (schoolsRes.data) setSchoolsList(schoolsRes.data);
 
     setLoading(false);
+  };
+
+  const handleAddSchool = async () => {
+    if (!newSchoolName.trim()) {
+      Alert.alert('Error', 'School name is required');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('schools').insert({
+      name: newSchoolName.trim(),
+      code: newSchoolCode.trim() || null,
+      primary_color: newSchoolPrimaryColor.trim() || '#6200EE',
+      accent_color: newSchoolAccentColor.trim() || '#03DAC6',
+    });
+    setSaving(false);
+    if (error) {
+      Alert.alert('Error', 'Failed to add school: ' + error.message);
+    } else {
+      setShowSchoolForm(false);
+      setNewSchoolName('');
+      setNewSchoolCode('');
+      setNewSchoolPrimaryColor('#6200EE');
+      setNewSchoolAccentColor('#03DAC6');
+      fetchData();
+    }
+  };
+
+  const handleLogoUpload = async (schoolId: string, currentSchoolName: string) => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.5,
+      });
+
+      if (result.canceled || !result.assets[0]) return;
+
+      const file = result.assets[0];
+      const mimeType = file.type === 'image' ? 'image/jpeg' : (file.mimeType || 'image/jpeg');
+
+      const publicUrl = await uploadSchoolLogo({
+        uri: file.uri,
+        type: mimeType,
+        name: file.fileName || `logo.jpg`
+      }, schoolId);
+
+      if (publicUrl) {
+        const { error } = await supabase
+          .from('schools')
+          .update({ logo_url: publicUrl })
+          .eq('id', schoolId);
+        
+        if (error) {
+          Alert.alert('Error', 'Failed to update school record');
+        } else {
+          fetchData(); // Refresh the list
+        }
+      } else {
+        Alert.alert('Error', 'Failed to upload image');
+      }
+    } catch (error) {
+      console.error(error);
+      Alert.alert('Error', 'An unexpected error occurred during upload');
+    }
   };
 
   // NEW: handleAddSubject function
@@ -372,7 +450,11 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const processedPayments = payments.filter(p => p.status !== 'pending');
   const totalRevenue = payments.filter(p => p.status === 'approved').reduce((sum, p) => sum + p.amount, 0);
 
-  if (!isAdmin) return null;
+  if (!isAdmin && !user?.is_school_admin) return null;
+
+  const superAdminTabs = ['payments', 'papers', 'users', 'quizzes', 'schools'] as const;
+  const schoolAdminTabs = ['notices', 'timetables'] as const;
+  const availableTabs = isAdmin ? [...superAdminTabs, ...schoolAdminTabs] : schoolAdminTabs;
 
   return (
     <View style={{ flex: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}>
@@ -411,10 +493,11 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
       </View>
 
       <View style={[styles.tabs, { marginHorizontal: -SPACING.lg }]}>
-        {(['payments', 'papers', 'users', 'quizzes'] as const).map(tab => {
-          const icons: Record<string, string> = { payments: 'card', papers: 'document-text', users: 'people', quizzes: 'help-circle' };
-          const badge = tab === 'payments' ? pendingPayments.length : 0;
-          return (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.lg, gap: 16 }}>
+          {availableTabs.map(tab => {
+            const icons: Record<string, string> = { payments: 'card', papers: 'document-text', users: 'people', quizzes: 'help-circle', schools: 'school', notices: 'megaphone', timetables: 'calendar' };
+            const badge = tab === 'payments' ? pendingPayments.length : 0;
+            return (
             <TouchableOpacity
               key={tab}
               style={[styles.tab, activeTab === tab && styles.tabActive]}
@@ -434,6 +517,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
             </TouchableOpacity>
           );
         })}
+        </ScrollView>
       </View>
 
       {loading ? (
@@ -589,22 +673,49 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 </View>
               </View>
 
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginBottom: SPACING.lg, paddingBottom: SPACING.sm }}>
-                {(['All', 'student', 'teacher', 'admin'] as const).map(role => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.lg, gap: SPACING.sm }}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingBottom: SPACING.sm }}>
+                  {(['All', 'student', 'teacher', 'admin'] as const).map(role => (
+                    <TouchableOpacity
+                      key={role}
+                      style={[styles.filterChip, filterRole === role && styles.filterChipActive]}
+                      onPress={() => setFilterRole(role)}
+                    >
+                      <Text style={[styles.filterChipText, filterRole === role && styles.filterChipTextActive]}>
+                        {role === 'All' ? 'All Roles' : role.charAt(0).toUpperCase() + role.slice(1) + 's'}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+                
+                {/* School Filter Dropdown (simplified as a horizontal scroll for now) */}
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', paddingBottom: SPACING.sm, borderLeftWidth: 1, borderLeftColor: COLORS.border, paddingLeft: SPACING.sm }}>
                   <TouchableOpacity
-                    key={role}
-                    style={[styles.filterChip, filterRole === role && styles.filterChipActive]}
-                    onPress={() => setFilterRole(role)}
+                    style={[styles.filterChip, filterSchool === 'All' && styles.filterChipActive]}
+                    onPress={() => setFilterSchool('All')}
                   >
-                    <Text style={[styles.filterChipText, filterRole === role && styles.filterChipTextActive]}>
-                      {role.charAt(0).toUpperCase() + role.slice(1)}s
+                    <Text style={[styles.filterChipText, filterSchool === 'All' && styles.filterChipTextActive]}>
+                      All Schools
                     </Text>
                   </TouchableOpacity>
-                ))}
-              </ScrollView>
+                  {Array.from(new Set(users.map(u => u.school).filter(Boolean))).map((schoolName) => (
+                    <TouchableOpacity
+                      key={schoolName as string}
+                      style={[styles.filterChip, filterSchool === schoolName && styles.filterChipActive]}
+                      onPress={() => setFilterSchool(schoolName as string)}
+                    >
+                      <Text style={[styles.filterChipText, filterSchool === schoolName && styles.filterChipTextActive]}>
+                        {schoolName as string}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
               {users
                 .filter(u => {
+                  if (filterSchool !== 'All' && u.school !== filterSchool) return false;
+                  
                   if (filterRole === 'All') return true;
                   if (filterRole === 'admin') return u.is_admin || u.role === 'admin';
                   if (filterRole === 'student') return u.role === 'student' || (!u.role && !u.is_admin);
@@ -634,7 +745,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                           )}
                         </View>
                         <Text style={styles.adminCardSub}>{u.email}</Text>
-                        {u.school && (
+                        {Boolean(u.school) && (
                           <Text style={[styles.adminCardSub, { marginTop: 4, color: COLORS.textMuted, fontSize: 11 }]}>
                             🏫 {u.school}
                           </Text>
@@ -653,6 +764,63 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 <Text style={styles.addBtnText}>Add Quiz Question</Text>
               </TouchableOpacity>
               <Text style={styles.infoText}>Manage quiz questions from the database.</Text>
+            </View>
+          )}
+
+          {activeTab === 'schools' && isAdmin && (
+            <View style={styles.tabContent}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowSchoolForm(true)}>
+                <Ionicons name="add-circle" size={20} color={COLORS.white} />
+                <Text style={styles.addBtnText}>Add New School</Text>
+              </TouchableOpacity>
+              
+              {schoolsList.map(school => (
+                <View key={school.id} style={styles.adminCard}>
+                  <View style={styles.adminCardHeader}>
+                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
+                      {school.logo_url ? (
+                        <Image source={{ uri: school.logo_url }} style={{ width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: COLORS.surfaceAlt }} />
+                      ) : (
+                        <View style={{ width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: school.primary_color, alignItems: 'center', justifyContent: 'center' }}>
+                          <Text style={{ ...FONTS.h3, color: COLORS.white }}>{school.name.charAt(0)}</Text>
+                        </View>
+                      )}
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.adminCardTitle}>{school.name}</Text>
+                        {school.code && (
+                          <View style={[styles.roleBadge, { alignSelf: 'flex-start', marginTop: 4 }]}>
+                            <Text style={styles.roleBadgeText}>{school.code}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                    
+                    <TouchableOpacity style={styles.actionBtn} onPress={() => handleLogoUpload(school.id, school.name)}>
+                      <Ionicons name="image-outline" size={20} color={COLORS.primary} />
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+
+          {activeTab === 'notices' && (
+            <View style={styles.tabContent}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert('Add Notice', 'Coming Soon!')}>
+                <Ionicons name="add-circle" size={20} color={COLORS.white} />
+                <Text style={styles.addBtnText}>Post Notice</Text>
+              </TouchableOpacity>
+              <Text style={styles.infoText}>Manage notice board announcements here.</Text>
+            </View>
+          )}
+
+          {activeTab === 'timetables' && (
+            <View style={styles.tabContent}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert('Add Timetable', 'Coming Soon!')}>
+                <Ionicons name="add-circle" size={20} color={COLORS.white} />
+                <Text style={styles.addBtnText}>Add Timetable Event</Text>
+              </TouchableOpacity>
+              <Text style={styles.infoText}>Manage examination timetables here.</Text>
             </View>
           )}
 
@@ -822,6 +990,45 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
           </View>
         </View>
       </Modal>
+
+      {/* NEW SCHOOL FORM MODAL */}
+      <Modal visible={showSchoolForm} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add New School</Text>
+                <TouchableOpacity onPress={() => setShowSchoolForm(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.formLabel}>School Name *</Text>
+              <TextInput style={styles.formInput} placeholder="e.g. Windhoek High School" placeholderTextColor={COLORS.textMuted} value={newSchoolName} onChangeText={setNewSchoolName} />
+              
+              <Text style={styles.formLabel}>School Code</Text>
+              <TextInput style={styles.formInput} placeholder="e.g. WHS" placeholderTextColor={COLORS.textMuted} value={newSchoolCode} onChangeText={setNewSchoolCode} />
+
+              <View style={styles.formRow}>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Primary Color (Hex)</Text>
+                  <TextInput style={styles.formInput} placeholder="#6200EE" placeholderTextColor={COLORS.textMuted} value={newSchoolPrimaryColor} onChangeText={setNewSchoolPrimaryColor} />
+                </View>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Accent Color (Hex)</Text>
+                  <TextInput style={styles.formInput} placeholder="#03DAC6" placeholderTextColor={COLORS.textMuted} value={newSchoolAccentColor} onChangeText={setNewSchoolAccentColor} />
+                </View>
+              </View>
+
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleAddSchool} disabled={saving}>
+                {saving ? <ActivityIndicator color={COLORS.white} /> : (
+                  <><Ionicons name="checkmark-circle" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Save School</Text></>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -833,7 +1040,7 @@ const styles = StyleSheet.create({
   refreshBtn: { width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
   headerTitle: { ...FONTS.h3, color: COLORS.white },
   tabs: { flexDirection: 'row', backgroundColor: COLORS.white, paddingHorizontal: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  tab: { flex: 1, paddingVertical: SPACING.md, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tab: { paddingVertical: SPACING.md, borderBottomWidth: 2, borderBottomColor: 'transparent' },
   tabActive: { borderBottomColor: COLORS.primary },
   tabInner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4 },
   tabText: { ...FONTS.small, color: COLORS.textMuted },

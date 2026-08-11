@@ -274,50 +274,52 @@ export default function HomeScreen() {
         </View>
 
         {/* Grade Levels */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Choose Your Level</Text>
-          <Text style={styles.sectionSubtitle}>Content tailored to your curriculum</Text>
+        {!user && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Choose Your Level</Text>
+            <Text style={styles.sectionSubtitle}>Content tailored to your curriculum</Text>
 
-          <View style={styles.gradeCards}>
-            <TouchableOpacity 
-              style={[styles.gradeCard, { borderColor: COLORS.green }]} 
-              onPress={() => router.push('/papers')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.gradeIconBg, { backgroundColor: COLORS.greenLight }]}>
-                <Ionicons name="school" size={28} color={COLORS.green} />
-              </View>
-              <Text style={styles.gradeCardTitle}>NSSCO</Text>
-              <Text style={styles.gradeCardSub}>Grade 10-11</Text>
-              <View style={styles.gradeTopics}>
-                <Text style={styles.gradeTopicText}>Algebra, Geometry, Statistics, Number, Trigonometry, Probability</Text>
-              </View>
-              <View style={[styles.gradeBtn, { backgroundColor: COLORS.green }]}>
-                <Text style={styles.gradeBtnText}>View Papers</Text>
-                <Ionicons name="arrow-forward" size={14} color={COLORS.white} />
-              </View>
-            </TouchableOpacity>
+            <View style={styles.gradeCards}>
+              <TouchableOpacity 
+                style={[styles.gradeCard, { borderColor: COLORS.green }]} 
+                onPress={() => router.push('/papers')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.gradeIconBg, { backgroundColor: COLORS.greenLight }]}>
+                  <Ionicons name="school" size={28} color={COLORS.green} />
+                </View>
+                <Text style={styles.gradeCardTitle}>NSSCO</Text>
+                <Text style={styles.gradeCardSub}>Grade 10-11</Text>
+                <View style={styles.gradeTopics}>
+                  <Text style={styles.gradeTopicText}>Algebra, Geometry, Statistics, Number, Trigonometry, Probability</Text>
+                </View>
+                <View style={[styles.gradeBtn, { backgroundColor: COLORS.green }]}>
+                  <Text style={styles.gradeBtnText}>View Papers</Text>
+                  <Ionicons name="arrow-forward" size={14} color={COLORS.white} />
+                </View>
+              </TouchableOpacity>
 
-            <TouchableOpacity 
-              style={[styles.gradeCard, { borderColor: COLORS.gold }]} 
-              onPress={() => router.push('/papers')}
-              activeOpacity={0.7}
-            >
-              <View style={[styles.gradeIconBg, { backgroundColor: COLORS.goldLight }]}>
-                <Ionicons name="ribbon" size={28} color={COLORS.gold} />
-              </View>
-              <Text style={styles.gradeCardTitle}>NSSCAS</Text>
-              <Text style={styles.gradeCardSub}>Grade 12</Text>
-              <View style={styles.gradeTopics}>
-                <Text style={styles.gradeTopicText}>Calculus, Vectors, Functions, Matrices, Sequences, Probability</Text>
-              </View>
-              <View style={[styles.gradeBtn, { backgroundColor: COLORS.gold }]}>
-                <Text style={styles.gradeBtnText}>View Papers</Text>
-                <Ionicons name="arrow-forward" size={14} color={COLORS.white} />
-              </View>
-            </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.gradeCard, { borderColor: COLORS.gold }]} 
+                onPress={() => router.push('/papers')}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.gradeIconBg, { backgroundColor: COLORS.goldLight }]}>
+                  <Ionicons name="ribbon" size={28} color={COLORS.gold} />
+                </View>
+                <Text style={styles.gradeCardTitle}>NSSCAS</Text>
+                <Text style={styles.gradeCardSub}>Grade 12</Text>
+                <View style={styles.gradeTopics}>
+                  <Text style={styles.gradeTopicText}>Calculus, Vectors, Functions, Matrices, Sequences, Probability</Text>
+                </View>
+                <View style={[styles.gradeBtn, { backgroundColor: COLORS.gold }]}>
+                  <Text style={styles.gradeBtnText}>View Papers</Text>
+                  <Ionicons name="arrow-forward" size={14} color={COLORS.white} />
+                </View>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Testimonials */}
         <View style={styles.section}>
