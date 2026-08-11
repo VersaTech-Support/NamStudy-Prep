@@ -38,26 +38,34 @@ export default function PapersScreen() {
   const router = useRouter();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
-  const [gradeFilter, setGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS'>('All');
+  const [curriculumFilter, setCurriculumFilter] = useState<'Namibian' | 'Cambridge'>('Namibian');
+  const [gradeFilter, setGradeFilter] = useState<string>('All');
   const [yearFilter, setYearFilter] = useState<number | null>(null);
   const [subjectFilter, setSubjectFilter] = useState<string>('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [authVisible, setAuthVisible] = useState(false);
   const [isOfflineError, setIsOfflineError] = useState(false);
 
+  const NAMIBIAN_GRADES = ['NSSCO', 'NSSCAS'];
+  const CAMBRIDGE_GRADES = ['IGCSE', 'AS Level'];
+  const currentGrades = curriculumFilter === 'Namibian' ? NAMIBIAN_GRADES : CAMBRIDGE_GRADES;
+
+  // Reset grade filter when curriculum changes
   useEffect(() => {
     const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
 
-    if (user && !userIsAdmin && user.grade_level) {
-      setGradeFilter(user.grade_level as 'NSSCO' | 'NSSCAS');
+    if (curriculumFilter === 'Namibian' && user && !userIsAdmin && user.grade_level) {
+      setGradeFilter(user.grade_level);
     } else {
       setGradeFilter('All');
     }
+    setSubjectFilter('All');
     fetchPapers();
-  }, [user]);
+  }, [user, curriculumFilter]);
 
   const fetchPapers = async () => {
-    const cachedPapers = await getCacheData('papers_list');
+    const cacheKey = curriculumFilter === 'Namibian' ? 'papers_list_namibian' : 'papers_list_cambridge';
+    const cachedPapers = await getCacheData(cacheKey);
     if (cachedPapers && cachedPapers.length > 0) {
       setPapers(cachedPapers);
       setLoading(false);
@@ -74,12 +82,13 @@ export default function PapersScreen() {
 
       const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
 
-      if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
-        query = query.in('subject', user.subjects);
-      }
+      // Filter by curriculum grade levels
+      const gradeLevels = curriculumFilter === 'Namibian' ? NAMIBIAN_GRADES : CAMBRIDGE_GRADES;
+      query = query.in('grade_level', gradeLevels);
 
-      if (user && !userIsAdmin && user.grade_level) {
-        query = query.eq('grade_level', user.grade_level);
+      // Subject filtering only for Namibian papers when user has subjects set
+      if (curriculumFilter === 'Namibian' && user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
+        query = query.in('subject', user.subjects);
       }
 
       const { data, error } = await query;
@@ -91,7 +100,7 @@ export default function PapersScreen() {
         }
       } else if (data) {
         setPapers(data);
-        await setCacheData('papers_list', data);
+        await setCacheData(cacheKey, data);
         setIsOfflineError(false);
       }
     } catch (err) {
@@ -185,6 +194,45 @@ export default function PapersScreen() {
           </View>
         </View>
 
+        {/* Curriculum Toggle */}
+        <View style={styles.curriculumToggleContainer}>
+          <View style={styles.curriculumToggle}>
+            {(['Namibian', 'Cambridge'] as const).map(curriculum => (
+              <TouchableOpacity
+                key={curriculum}
+                style={[
+                  styles.curriculumToggleBtn,
+                  curriculumFilter === curriculum && (
+                    curriculum === 'Namibian'
+                      ? styles.curriculumToggleBtnActiveNamibian
+                      : styles.curriculumToggleBtnActiveCambridge
+                  ),
+                ]}
+                onPress={() => setCurriculumFilter(curriculum)}
+                activeOpacity={0.7}
+              >
+                <Ionicons
+                  name={curriculum === 'Namibian' ? 'flag' : 'globe'}
+                  size={16}
+                  color={
+                    curriculumFilter === curriculum
+                      ? COLORS.white
+                      : COLORS.textMuted
+                  }
+                />
+                <Text
+                  style={[
+                    styles.curriculumToggleText,
+                    curriculumFilter === curriculum && styles.curriculumToggleTextActive,
+                  ]}
+                >
+                  {curriculum === 'Namibian' ? 'Namibian Papers' : 'Cambridge Papers'}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+
         {availableSubjects.length > 1 && (
           <View style={styles.filterSection}>
             <Text style={styles.filterLabel}>Subject</Text>
@@ -215,14 +263,24 @@ export default function PapersScreen() {
         <View style={styles.filterSection}>
           <Text style={styles.filterLabel}>Grade Level</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterScroll}>
-            {(['All', 'NSSCO', 'NSSCAS'] as const).map(grade => (
+            {['All', ...currentGrades].map(grade => (
               <TouchableOpacity
                 key={grade}
-                style={[styles.filterChip, gradeFilter === grade && styles.filterChipActive]}
+                style={[
+                  styles.filterChip,
+                  gradeFilter === grade && (
+                    curriculumFilter === 'Cambridge'
+                      ? styles.filterChipActiveCambridge
+                      : styles.filterChipActive
+                  ),
+                ]}
                 onPress={() => setGradeFilter(grade)}
               >
-                <Text style={[styles.filterChipText, gradeFilter === grade && styles.filterChipTextActive]}>
-                  {grade === 'All' ? 'All Grades' : grade === 'NSSCO' ? 'NSSCO (Gr 10-11)' : 'NSSCAS (Gr 12)'}
+                <Text style={[
+                  styles.filterChipText,
+                  gradeFilter === grade && styles.filterChipTextActive,
+                ]}>
+                  {grade === 'All' ? 'All Grades' : grade === 'NSSCO' ? 'NSSCO (Gr 10-11)' : grade === 'NSSCAS' ? 'NSSCAS (Gr 12)' : grade}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -315,11 +373,19 @@ const styles = StyleSheet.create({
   searchContainer: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 12, gap: SPACING.sm, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.border },
   searchInput: { flex: 1, ...FONTS.body, color: COLORS.textPrimary },
+  curriculumToggleContainer: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
+  curriculumToggle: { flexDirection: 'row', backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.md, padding: 4 },
+  curriculumToggleBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.xs, paddingVertical: 10, borderRadius: RADIUS.sm },
+  curriculumToggleBtnActiveNamibian: { backgroundColor: COLORS.primary, ...SHADOWS.sm },
+  curriculumToggleBtnActiveCambridge: { backgroundColor: COLORS.accent, ...SHADOWS.sm },
+  curriculumToggleText: { ...FONTS.caption, color: COLORS.textMuted, fontWeight: '600' },
+  curriculumToggleTextActive: { color: COLORS.white, fontWeight: '700' },
   filterSection: { paddingTop: SPACING.lg, paddingLeft: SPACING.xl },
   filterLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginBottom: SPACING.sm },
   filterScroll: { flexGrow: 0 },
   filterChip: { paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderRadius: RADIUS.full, backgroundColor: COLORS.white, marginRight: SPACING.sm, borderWidth: 1, borderColor: COLORS.border },
   filterChipActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
+  filterChipActiveCambridge: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   filterChipText: { ...FONTS.caption, color: COLORS.textSecondary },
   filterChipTextActive: { color: COLORS.white, fontWeight: '700' },
   freeBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.greenLight, marginHorizontal: SPACING.xl, marginTop: SPACING.lg, marginBottom: SPACING.md, padding: SPACING.md, borderRadius: RADIUS.md, gap: SPACING.md, borderWidth: 1, borderColor: COLORS.green + '30' },

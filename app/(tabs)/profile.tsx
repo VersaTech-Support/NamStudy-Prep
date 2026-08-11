@@ -17,6 +17,7 @@ import { supabase } from '@/lib/supabase';
 import AuthModal from '@/components/AuthModal';
 import UpgradeModal from '@/components/UpgradeModal';
 import * as ImagePicker from 'expo-image-picker';
+import AdminDashboard from '@/components/AdminDashboard';
 
 interface Payment {
   id: string;
@@ -30,7 +31,7 @@ interface Payment {
 }
 
 export default function ProfileScreen() {
-  const { user, isVIP, isAdmin, logout, refreshUser, updateProfile } = useUser();
+  const { user, isVIP, isAdmin, onlineUsersCount, logout, refreshUser, updateProfile } = useUser();
   const router = useRouter();
   const [authVisible, setAuthVisible] = useState(false);
   const [upgradeVisible, setUpgradeVisible] = useState(false);
@@ -117,7 +118,6 @@ export default function ProfileScreen() {
     { icon: 'document-text', label: 'My Papers', color: COLORS.green, onPress: () => router.push('/papers') },
     { icon: 'help-circle', label: 'My Quizzes', color: COLORS.accent, onPress: () => router.push('/quizzes') },
     { icon: 'card', label: 'Payment & Billing', color: COLORS.gold, onPress: () => router.push('/payment') },
-    ...(isAdmin ? [{ icon: 'settings', label: 'Admin Dashboard', color: COLORS.primary, onPress: () => router.push('/admin') }] : []),
   ];
 
   return (
@@ -128,30 +128,46 @@ export default function ProfileScreen() {
       </View>
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
         {/* Profile Card */}
-        <View style={styles.profileCard}>
+        <View style={[styles.profileCard, isAdmin && { borderColor: '#E5E4E2', borderWidth: 2, backgroundColor: '#fdfdfd' }]}>
           <TouchableOpacity onPress={pickImage} style={{ position: 'relative', marginBottom: SPACING.md }} activeOpacity={0.9}>
-            <View style={styles.avatar}>
+            <View style={[styles.avatar, isAdmin && { backgroundColor: '#8A9EA7' }]}>
               {user.avatar_url ? (
                 <Image source={{ uri: user.avatar_url }} style={{ width: 72, height: 72, borderRadius: 36 }} />
               ) : (
                 <Text style={styles.avatarText}>{user.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}</Text>
               )}
             </View>
-            <View style={styles.cameraOverlay}>
+            <View style={[styles.cameraOverlay, isAdmin && { backgroundColor: '#8A9EA7', borderColor: '#fdfdfd' }]}>
               <Ionicons name="camera" size={12} color={COLORS.white} />
             </View>
-            {isVIP && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
+            {isVIP && !isAdmin && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
+            {isAdmin && <View style={[styles.vipBadgeSmall, { backgroundColor: '#A0B2C6' }]}><Ionicons name="shield" size={12} color={COLORS.white} /></View>}
           </TouchableOpacity>
           <Text style={styles.profileName}>{user.name}</Text>
           <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{user.email}</Text>
           <View style={{ flexDirection: 'row', gap: SPACING.sm }}>
-            <View style={[styles.profileTag, { backgroundColor: user.grade_level === 'NSSCO' ? COLORS.greenLight : COLORS.goldLight }]}>
-              <Text style={[styles.profileTagText, { color: user.grade_level === 'NSSCO' ? COLORS.greenDark : COLORS.goldDark }]}>{user.grade_level}</Text>
-            </View>
-            <View style={[styles.profileTag, { backgroundColor: isVIP ? COLORS.goldLight : COLORS.surfaceAlt }]}>
-              <Ionicons name={isVIP ? 'diamond' : 'person'} size={12} color={isVIP ? COLORS.gold : COLORS.textMuted} />
-              <Text style={[styles.profileTagText, { color: isVIP ? COLORS.goldDark : COLORS.textMuted }]}>{isVIP ? 'VIP Member' : 'Free Plan'}</Text>
-            </View>
+            {isAdmin ? (
+              <View style={[styles.profileTag, { backgroundColor: '#E5E4E2' }]}>
+                <Ionicons name="shield-checkmark" size={12} color={'#6B7A85'} />
+                <Text style={[styles.profileTagText, { color: '#6B7A85' }]}>Command Center</Text>
+              </View>
+            ) : user.role === 'teacher' ? (
+              <View style={[styles.profileTag, { backgroundColor: COLORS.accentLight }]}>
+                <Ionicons name="briefcase" size={12} color={COLORS.accent} />
+                <Text style={[styles.profileTagText, { color: COLORS.accent }]}>Teacher</Text>
+              </View>
+            ) : (
+              <View style={[styles.profileTag, { backgroundColor: user.grade_level === 'NSSCO' ? COLORS.greenLight : COLORS.goldLight }]}>
+                <Text style={[styles.profileTagText, { color: user.grade_level === 'NSSCO' ? COLORS.greenDark : COLORS.goldDark }]}>{user.grade_level}</Text>
+              </View>
+            )}
+            
+            {!isAdmin && (
+              <View style={[styles.profileTag, { backgroundColor: isVIP ? COLORS.goldLight : COLORS.surfaceAlt }]}>
+                <Ionicons name={isVIP ? 'diamond' : 'person'} size={12} color={isVIP ? COLORS.gold : COLORS.textMuted} />
+                <Text style={[styles.profileTagText, { color: isVIP ? COLORS.goldDark : COLORS.textMuted }]}>{isVIP ? 'VIP Plan' : 'Free Plan'}</Text>
+              </View>
+            )}
           </View>
         </View>
 
@@ -170,7 +186,7 @@ export default function ProfileScreen() {
         )}
 
         {/* Subscription */}
-        {isVIP ? (
+        {isVIP && !isAdmin ? (
           <View style={styles.subscriptionCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
               <View style={{ width: 44, height: 44, borderRadius: RADIUS.md, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
@@ -192,7 +208,7 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
-        ) : !pendingPayment ? (
+        ) : !pendingPayment && !isAdmin ? (
           <TouchableOpacity style={styles.upgradeCard} onPress={() => router.push('/payment')} activeOpacity={0.8}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
               <View style={{ width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
@@ -207,20 +223,25 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         ) : null}
 
-        {/* Menu */}
-        <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
-          <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Quick Access</Text>
-          {menuItems.map((item, i) => (
-            <TouchableOpacity key={i} style={styles.menuItem} onPress={item.onPress} activeOpacity={0.7}>
-              <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={20} color={item.color} /></View>
-              <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary, flex: 1 }}>{item.label}</Text>
-              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-            </TouchableOpacity>
-          ))}
-        </View>
+        {/* Admin Dashboard */}
+        {isAdmin && <AdminDashboard onlineUsersCount={onlineUsersCount} />}
 
-        {/* Recent Payments */}
-        {payments.length > 0 && (
+        {/* Consumer Menus */}
+        {!isAdmin && (
+          <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
+            <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Quick Access</Text>
+            {menuItems.map((item, i) => (
+              <TouchableOpacity key={i} style={styles.menuItem} onPress={item.onPress} activeOpacity={0.7}>
+                <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={20} color={item.color} /></View>
+                <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary, flex: 1 }}>{item.label}</Text>
+                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
+        {/* Recent Payments for Consumers */}
+        {payments.length > 0 && !isAdmin && (
           <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
             <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Recent Payments</Text>
             {payments.slice(0, 3).map((p) => (

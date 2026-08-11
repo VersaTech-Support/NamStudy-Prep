@@ -31,6 +31,7 @@ interface PaperCardProps {
 
 export default function PaperCard({ paper, isVIP, isBookmarked, onDownloadPaper, onViewSolution, onToggleBookmark }: PaperCardProps) {
   const yearColor = paper.year >= 2023 ? COLORS.primary : COLORS.accent;
+  const isCambridge = paper.grade_level === 'IGCSE' || paper.grade_level === 'AS Level';
 
   return (
     <View style={styles.card}>
@@ -41,14 +42,20 @@ export default function PaperCard({ paper, isVIP, isBookmarked, onDownloadPaper,
             <Text style={[styles.yearText, { color: yearColor }]}>{paper.year}</Text>
           </View>
           <View style={[styles.gradeBadge, { 
-            backgroundColor: paper.grade_level === 'NSSCO' ? COLORS.greenLight : COLORS.goldLight 
+            backgroundColor: isCambridge ? COLORS.accentLight + '30' : paper.grade_level === 'NSSCO' ? COLORS.greenLight : COLORS.goldLight 
           }]}>
             <Text style={[styles.gradeText, { 
-              color: paper.grade_level === 'NSSCO' ? COLORS.greenDark : COLORS.goldDark 
+              color: isCambridge ? COLORS.accent : paper.grade_level === 'NSSCO' ? COLORS.greenDark : COLORS.goldDark 
             }]}>
               {paper.grade_level}
             </Text>
           </View>
+          {isCambridge && (
+            <View style={styles.cambridgeBadge}>
+              <Ionicons name="globe-outline" size={10} color={COLORS.accent} />
+              <Text style={styles.cambridgeBadgeText}>Cambridge</Text>
+            </View>
+          )}
         </View>
         <View style={styles.headerRight}>
           {onToggleBookmark && (
@@ -215,5 +222,22 @@ const styles = StyleSheet.create({
   },
   solutionBtnTextUnlocked: {
     color: COLORS.white,
+  },
+  cambridgeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: SPACING.xs,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.accent + '12',
+    borderWidth: 1,
+    borderColor: COLORS.accent + '25',
+  },
+  cambridgeBadgeText: {
+    ...FONTS.small,
+    fontWeight: '700',
+    color: COLORS.accent,
+    fontSize: 9,
   },
 });

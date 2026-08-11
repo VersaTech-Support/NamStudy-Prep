@@ -32,6 +32,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
   const [password, setPassword] = useState(''); // Added Password state
   const [showPassword, setShowPassword] = useState(false); // Toggle visibility
   const [gradeLevel, setGradeLevel] = useState<'NSSCO' | 'NSSCAS'>('NSSCO');
+  const [role, setRole] = useState<'student' | 'teacher'>('student');
   
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -64,7 +65,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
         }
       } else {
         // Passing password to signup function
-        const success = await signup(name, email, password, gradeLevel);
+        const success = await signup(name, email, password, gradeLevel, role);
         if (success) {
           setShowOtp(true);
           setError('');
@@ -114,6 +115,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
     setShowOtp(false);
     setShowPassword(false);
     setGradeLevel('NSSCO');
+    setRole('student');
   };
 
   const handleClose = () => {
@@ -205,6 +207,30 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
               <View>
                 {!isLogin && (
                   <View style={styles.inputGroup}>
+                    <Text style={styles.label}>I am a...</Text>
+                    <View style={styles.roleToggle}>
+                      <TouchableOpacity
+                        style={[styles.roleBtn, role === 'student' && styles.roleBtnActive]}
+                        onPress={() => setRole('student')}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="school-outline" size={18} color={role === 'student' ? COLORS.primary : COLORS.textMuted} />
+                        <Text style={[styles.roleBtnText, role === 'student' && styles.roleBtnTextActive]}>Student</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.roleBtn, role === 'teacher' && styles.roleBtnActive]}
+                        onPress={() => setRole('teacher')}
+                        activeOpacity={0.8}
+                      >
+                        <Ionicons name="briefcase-outline" size={18} color={role === 'teacher' ? COLORS.primary : COLORS.textMuted} />
+                        <Text style={[styles.roleBtnText, role === 'teacher' && styles.roleBtnTextActive]}>Teacher</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+
+                {!isLogin && (
+                  <View style={styles.inputGroup}>
                     <Text style={styles.label}>Full Name</Text>
                     <View style={styles.inputContainer}>
                       <Ionicons name="person-outline" size={18} color={COLORS.textMuted} />
@@ -259,8 +285,8 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
                   </View>
                 </View>
 
-                {/* Grade Level (Signup Only) */}
-                {!isLogin && (
+                {/* Grade Level (Signup Only, Students Only) */}
+                {!isLogin && role === 'student' && (
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Grade Level</Text>
                     <View style={styles.gradeRow}>
@@ -423,6 +449,32 @@ const styles = StyleSheet.create({
     flex: 1,
     ...FONTS.body,
     color: COLORS.textPrimary,
+  },
+  roleToggle: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.md,
+    padding: 4,
+  },
+  roleBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.xs,
+    paddingVertical: 12,
+    borderRadius: RADIUS.sm,
+  },
+  roleBtnActive: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.sm,
+  },
+  roleBtnText: {
+    ...FONTS.bodyBold,
+    color: COLORS.textMuted,
+  },
+  roleBtnTextActive: {
+    color: COLORS.primary,
   },
   gradeRow: {
     flexDirection: 'row',

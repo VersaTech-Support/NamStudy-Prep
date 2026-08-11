@@ -23,6 +23,8 @@ export default function HomeScreen() {
   const [authVisible, setAuthVisible] = useState(false);
   const [paperCount, setPaperCount] = useState(0);
   const [quizCount, setQuizCount] = useState(0);
+  const [studentCount, setStudentCount] = useState(0);
+  const [teacherCount, setTeacherCount] = useState(0);
 
   // Exam Countdown (Assume Nov 1st of current year)
   const calculateDaysToExam = () => {
@@ -43,15 +45,20 @@ export default function HomeScreen() {
   const fetchCounts = async () => {
     const { count: pCount } = await supabase.from('papers').select('*', { count: 'exact', head: true });
     const { count: qCount } = await supabase.from('quizzes').select('*', { count: 'exact', head: true });
+    const { count: sCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student');
+    const { count: tCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
+    
     if (pCount) setPaperCount(pCount);
     if (qCount) setQuizCount(qCount);
+    if (sCount) setStudentCount(sCount);
+    if (tCount) setTeacherCount(tCount);
   };
 
   const stats = [
     { icon: 'document-text', label: 'Past Papers', value: `${paperCount}+`, color: COLORS.green },
     { icon: 'help-circle', label: 'Quiz Questions', value: `${quizCount}+`, color: COLORS.accent },
-    { icon: 'people', label: 'Students', value: '2.4K+', color: COLORS.primary },
-    { icon: 'trophy', label: 'Pass Rate', value: '94%', color: COLORS.gold },
+    { icon: 'people', label: 'Students', value: `${studentCount}`, color: COLORS.primary },
+    { icon: 'briefcase', label: 'Teachers', value: `${teacherCount}`, color: COLORS.gold },
   ];
 
   const features = [

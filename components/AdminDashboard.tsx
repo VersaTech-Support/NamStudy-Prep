@@ -39,6 +39,8 @@ interface UserRecord {
   subscription_status: string;
   expiry_date: string | null;
   is_admin: boolean;
+  role?: string;
+  school?: string | null;
 }
 
 interface PaymentRecord {
@@ -56,11 +58,11 @@ interface PaymentRecord {
   users?: { name: string; email: string; grade_level: string };
 }
 
-export default function AdminScreen() {
+export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?: number }) {
   const { user, isAdmin } = useUser();
-  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'payments' | 'papers' | 'users' | 'quizzes'>('payments');
+  const [filterRole, setFilterRole] = useState<'All' | 'student' | 'teacher' | 'admin'>('All');
   const [papers, setPapers] = useState<Paper[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
@@ -73,7 +75,7 @@ export default function AdminScreen() {
   const [paperTitle, setPaperTitle] = useState('');
   const [paperYear, setPaperYear] = useState('2024');
   const [paperNumber, setPaperNumber] = useState('1');
-  const [paperGrade, setPaperGrade] = useState<'NSSCO' | 'NSSCAS'>('NSSCO');
+  const [paperGrade, setPaperGrade] = useState<'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level'>('NSSCO');
   const [paperSubject, setPaperSubject] = useState('Mathematics'); // NEW
   const [paperUrl, setPaperUrl] = useState('');
   const [solutionUrl, setSolutionUrl] = useState('');
@@ -108,11 +110,6 @@ export default function AdminScreen() {
   const [rejectNote, setRejectNote] = useState('');
 
   useEffect(() => {
-    if (!isAdmin) {
-      Alert.alert('Access Denied', 'You need admin access to view this page.');
-      router.back();
-      return;
-    }
     fetchData();
   }, []);
 
@@ -130,7 +127,7 @@ export default function AdminScreen() {
     if (usersRes.data) setUsers(usersRes.data);
     if (quizzesRes.count !== null) setQuizCount(quizzesRes.count);
     if (paymentsRes.data) setPayments(paymentsRes.data as any);
-    if (subjectsRes.data) setAvailableSubjects(subjectsRes.data.map(s => s.name));
+    if (subjectsRes.data) setAvailableSubjects(subjectsRes.data.map((s: { name: string }) => s.name));
 
     setLoading(false);
   };
@@ -378,18 +375,42 @@ export default function AdminScreen() {
   if (!isAdmin) return null;
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={COLORS.white} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Admin Dashboard</Text>
-        <TouchableOpacity style={styles.refreshBtn} onPress={fetchData}>
-          <Ionicons name="refresh" size={20} color={COLORS.white} />
-        </TouchableOpacity>
+    <View style={{ flex: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}>
+      {/* Live System Metrics Board */}
+      <View style={{ marginVertical: SPACING.lg, padding: SPACING.md, backgroundColor: '#fdfdfd', borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#E5E4E2' }}>
+        <Text style={{ ...FONTS.h3, color: '#6B7A85', marginBottom: SPACING.md }}>System Overview</Text>
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.sm }}>
+          <View style={{ flexBasis: '48%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight, flexDirection: 'row', alignItems: 'center' }}>
+            <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.green, marginRight: SPACING.sm }} />
+            <View>
+              <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>{onlineUsersCount || 0}</Text>
+              <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Currently Online</Text>
+            </View>
+          </View>
+          
+          <View style={{ flexBasis: '48%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.textPrimary }}>{users.length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Total Users</Text>
+          </View>
+
+          <View style={{ flexBasis: '31%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.primary }}>{users.filter(u => u.role === 'student' || (!u.role && !u.is_admin)).length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Students</Text>
+          </View>
+
+          <View style={{ flexBasis: '31%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.accent }}>{users.filter(u => u.role === 'teacher').length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Teachers</Text>
+          </View>
+          
+          <View style={{ flexBasis: '31%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.green }}>{papers.length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Papers</Text>
+          </View>
+        </View>
       </View>
 
-      <View style={styles.tabs}>
+      <View style={[styles.tabs, { marginHorizontal: -SPACING.lg }]}>
         {(['payments', 'papers', 'users', 'quizzes'] as const).map(tab => {
           const icons: Record<string, string> = { payments: 'card', papers: 'document-text', users: 'people', quizzes: 'help-circle' };
           const badge = tab === 'payments' ? pendingPayments.length : 0;
@@ -420,24 +441,7 @@ export default function AdminScreen() {
           <ActivityIndicator size="large" color={COLORS.primary} />
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
-          <View style={styles.statsOverviewRow}>
-            <View style={styles.overviewCard}>
-              <Ionicons name="document-text" size={20} color={COLORS.green} />
-              <Text style={styles.overviewNum}>{papers.length}</Text>
-              <Text style={styles.overviewLabel}>Total Papers</Text>
-            </View>
-            <View style={styles.overviewCard}>
-              <Ionicons name="help-circle" size={20} color={COLORS.accent} />
-              <Text style={styles.overviewNum}>{quizCount}</Text>
-              <Text style={styles.overviewLabel}>Quiz Questions</Text>
-            </View>
-            <View style={styles.overviewCard}>
-              <Ionicons name="people" size={20} color={COLORS.primary} />
-              <Text style={styles.overviewNum}>{users.length}</Text>
-              <Text style={styles.overviewLabel}>Registered Users</Text>
-            </View>
-          </View>
+        <View style={{ flex: 1 }}>
 
           {/* PAYMENTS TAB OMITTED FOR BREVITY (Unchanged) */}
           {activeTab === 'payments' && (
@@ -563,22 +567,82 @@ export default function AdminScreen() {
             </View>
           )}
 
-          {/* USERS & QUIZZES TABS OMITTED FOR BREVITY (Unchanged structurally, UI adjusted) */}
+          {/* USERS TAB */}
           {activeTab === 'users' && (
             <View style={styles.tabContent}>
-              {users.map(u => (
-                <View key={u.id} style={styles.adminCard}>
-                  <View style={styles.userRow}>
-                    <View style={styles.userAvatar}>
-                      <Text style={styles.userAvatarText}>{u.name.charAt(0)}</Text>
-                    </View>
-                    <View style={styles.userInfo}>
-                      <Text style={styles.adminCardTitle}>{u.name}</Text>
-                      <Text style={styles.adminCardSub}>{u.email}</Text>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.md }}>
+                <View style={[styles.revCard, { flex: 1, marginRight: SPACING.xs, backgroundColor: COLORS.surfaceAlt, borderColor: COLORS.borderLight }]}>
+                  <Text style={[styles.revNum, { color: COLORS.textPrimary, fontSize: 18 }]}>{users.length}</Text>
+                  <Text style={styles.revLabel}>Total</Text>
+                </View>
+                <View style={[styles.revCard, { flex: 1, marginRight: SPACING.xs, backgroundColor: COLORS.primary + '10', borderColor: COLORS.primary + '30' }]}>
+                  <Text style={[styles.revNum, { color: COLORS.primary, fontSize: 18 }]}>{users.filter(u => u.role === 'student' || (!u.role && !u.is_admin)).length}</Text>
+                  <Text style={styles.revLabel}>Students</Text>
+                </View>
+                <View style={[styles.revCard, { flex: 1, marginRight: SPACING.xs, backgroundColor: COLORS.accent + '10', borderColor: COLORS.accent + '30' }]}>
+                  <Text style={[styles.revNum, { color: COLORS.accent, fontSize: 18 }]}>{users.filter(u => u.role === 'teacher').length}</Text>
+                  <Text style={styles.revLabel}>Teachers</Text>
+                </View>
+                <View style={[styles.revCard, { flex: 1, backgroundColor: COLORS.gold + '10', borderColor: COLORS.gold + '30' }]}>
+                  <Text style={[styles.revNum, { color: COLORS.gold, fontSize: 18 }]}>{users.filter(u => u.is_admin || u.role === 'admin').length}</Text>
+                  <Text style={styles.revLabel}>Admins</Text>
+                </View>
+              </View>
+
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row', marginBottom: SPACING.lg, paddingBottom: SPACING.sm }}>
+                {(['All', 'student', 'teacher', 'admin'] as const).map(role => (
+                  <TouchableOpacity
+                    key={role}
+                    style={[styles.filterChip, filterRole === role && styles.filterChipActive]}
+                    onPress={() => setFilterRole(role)}
+                  >
+                    <Text style={[styles.filterChipText, filterRole === role && styles.filterChipTextActive]}>
+                      {role.charAt(0).toUpperCase() + role.slice(1)}s
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+
+              {users
+                .filter(u => {
+                  if (filterRole === 'All') return true;
+                  if (filterRole === 'admin') return u.is_admin || u.role === 'admin';
+                  if (filterRole === 'student') return u.role === 'student' || (!u.role && !u.is_admin);
+                  return u.role === filterRole;
+                })
+                .map(u => (
+                  <View key={u.id} style={styles.adminCard}>
+                    <View style={styles.userRow}>
+                      <View style={styles.userAvatar}>
+                        <Text style={styles.userAvatarText}>{u.name.charAt(0)}</Text>
+                      </View>
+                      <View style={[styles.userInfo, { flex: 1 }]}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: SPACING.xs, marginBottom: 2 }}>
+                          <Text style={styles.adminCardTitle}>{u.name}</Text>
+                          {(u.is_admin || u.role === 'admin') ? (
+                            <View style={[styles.roleBadge, { backgroundColor: COLORS.gold + '20' }]}>
+                              <Text style={[styles.roleBadgeText, { color: COLORS.goldDark }]}>Admin</Text>
+                            </View>
+                          ) : u.role === 'teacher' ? (
+                            <View style={[styles.roleBadge, { backgroundColor: COLORS.accent + '20' }]}>
+                              <Text style={[styles.roleBadgeText, { color: COLORS.accent }]}>Teacher</Text>
+                            </View>
+                          ) : (
+                            <View style={[styles.roleBadge, { backgroundColor: COLORS.primary + '20' }]}>
+                              <Text style={[styles.roleBadgeText, { color: COLORS.primary }]}>Student</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={styles.adminCardSub}>{u.email}</Text>
+                        {u.school && (
+                          <Text style={[styles.adminCardSub, { marginTop: 4, color: COLORS.textMuted, fontSize: 11 }]}>
+                            🏫 {u.school}
+                          </Text>
+                        )}
+                      </View>
                     </View>
                   </View>
-                </View>
-              ))}
+                ))}
             </View>
           )}
 
@@ -593,7 +657,7 @@ export default function AdminScreen() {
           )}
 
           <View style={{ height: 40 }} />
-        </ScrollView>
+        </View>
       )}
 
       {/* PAPER FORM MODAL */}
@@ -634,7 +698,7 @@ export default function AdminScreen() {
 
               <Text style={styles.formLabel}>Grade Level *</Text>
               <View style={styles.formGradeRow}>
-                {(['NSSCO', 'NSSCAS'] as const).map(g => (
+                {(['NSSCO', 'NSSCAS', 'IGCSE', 'AS Level'] as const).map(g => (
                   <TouchableOpacity key={g} style={[styles.formGradeBtn, paperGrade === g && styles.formGradeBtnActive]} onPress={() => setPaperGrade(g)}>
                     <Text style={[styles.formGradeBtnText, paperGrade === g && styles.formGradeBtnTextActive]}>{g}</Text>
                   </TouchableOpacity>
@@ -836,6 +900,33 @@ const styles = StyleSheet.create({
   formGradeBtnActive: { backgroundColor: COLORS.primary, borderColor: COLORS.primary },
   formGradeBtnText: { ...FONTS.caption, color: COLORS.textSecondary },
   formGradeBtnTextActive: { color: COLORS.white, fontWeight: '700' },
+  filterChip: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 8,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceAlt,
+    marginRight: SPACING.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  filterChipActive: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  filterChipText: {
+    ...FONTS.caption,
+    color: COLORS.textSecondary,
+  },
+  filterChipTextActive: { color: COLORS.white, fontWeight: '700' },
+  roleBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  roleBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
   uploadPickerBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.surfaceAlt, borderWidth: 1.5, borderColor: COLORS.primary, borderStyle: 'dashed', borderRadius: RADIUS.md, paddingVertical: 14, marginTop: 4 },
   uploadPickerBtnText: { ...FONTS.caption, color: COLORS.primary, fontWeight: '700' },
   successUrlText: { ...FONTS.small, color: COLORS.green, marginTop: 4, fontWeight: '600' },

@@ -30,13 +30,6 @@ export default function RootLayout() {
             presentation: 'modal',
           }}
         />
-        <Stack.Screen
-          name="admin"
-          options={{
-            headerShown: false,
-            presentation: 'modal',
-          }}
-        />
         <Stack.Screen name="tutor" options={{ headerShown: false }} />
 
       </Stack>

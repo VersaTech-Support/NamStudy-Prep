@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { supabase } from '@/lib/supabase';
@@ -33,9 +33,10 @@ interface UserContextType {
   loading: boolean;
   bookmarks: Bookmark[];
   streak: number;
+  onlineUsersCount: number;
   customerInfo: CustomerInfo | null;
   login: (email: string, password: string) => Promise<boolean>;
-  signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS') => Promise<boolean>;
+  signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS', role: 'student' | 'teacher') => Promise<boolean>;
   updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
@@ -52,17 +53,83 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [streak, setStreak] = useState(0);
+  const [onlineUsersCount, setOnlineUsersCount] = useState(0);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
 
+  // Ref to hold latest user for stable access inside listeners (avoids stale closures)
+  const userRef = useRef<UserProfile | null>(user);
+  userRef.current = user;
+
+  // Supabase Realtime Presence
   useEffect(() => {
-    if (Platform.OS === 'android') {
+    const channel = supabase.channel('namstudy-presence');
+    
+    channel.on('presence', { event: 'sync' }, () => {
+      const state = channel.presenceState();
+      let count = 0;
+      for (const key in state) {
+        count += state[key].length;
+      }
+      setOnlineUsersCount(count);
+    }).subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        // Track presence regardless of auth state (anonymous guests are counted too)
+        await channel.track({ user: userRef.current?.id || `guest-${Math.random().toString(36).substring(7)}` });
+      }
+    });
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  /**
+   * Sync RevenueCat subscription state to Supabase.
+   * Only writes to the database when the status actually differs.
+   * Only updates local React state after a successful DB write.
+   */
+  const syncRevenueCatToSupabase = async (info: CustomerInfo, userId: string) => {
+    try {
+      const hasEntitlement = info.entitlements.active['NamibStudy Prep Pro'] !== undefined;
+      const targetStatus = hasEntitlement ? 'VIP' : 'FREE';
+
+      // Compare before writing — skip if already correct
+      if (userRef.current?.subscription_status === targetStatus) return;
+
+      // Update Supabase
+      const { error } = await supabase
+        .from('users')
+        .update({ subscription_status: targetStatus })
+        .eq('id', userId);
+
+      if (error) {
+        console.error('Sync RevenueCat → Supabase error:', error.message);
+        return; // Do NOT update local state on failure
+      }
+
+      // Only update local state after successful DB write
+      setUser(prev => prev ? { ...prev, subscription_status: targetStatus } : prev);
+    } catch (err) {
+      console.error('Sync RevenueCat → Supabase exception:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' && Platform.OS === 'android') {
       Purchases.configure({ apiKey: 'goog_tJlncTghUDnHSBUfHKUcvVEFEAK' });
     }
 
     const customerInfoListener = (info: CustomerInfo) => {
       setCustomerInfo(info);
+      // Sync subscription status to Supabase when RevenueCat state changes
+      const currentUserId = userRef.current?.id;
+      if (currentUserId) {
+        syncRevenueCatToSupabase(info, currentUserId);
+      }
     };
-    Purchases.addCustomerInfoUpdateListener(customerInfoListener);
+    if (Platform.OS !== 'web') {
+      Purchases.addCustomerInfoUpdateListener(customerInfoListener);
+    }
 
     checkSession();
 
@@ -70,8 +137,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         await fetchUserProfile(session.user.id);
         try {
-          const { customerInfo } = await Purchases.logIn(session.user.id);
-          setCustomerInfo(customerInfo);
+          if (Platform.OS !== 'web') {
+            const { customerInfo } = await Purchases.logIn(session.user.id);
+            setCustomerInfo(customerInfo);
+            await syncRevenueCatToSupabase(customerInfo, session.user.id);
+          }
         } catch (e) {
           console.error('RevenueCat logIn error:', e);
         }
@@ -79,7 +149,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         setUser(null);
         setCustomerInfo(null);
         try {
-          await Purchases.logOut();
+          if (Platform.OS !== 'web') {
+            await Purchases.logOut();
+          }
         } catch (e) {
           console.error('RevenueCat logOut error:', e);
         }
@@ -89,7 +161,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     return () => {
       subscription.unsubscribe();
-      Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
+      if (Platform.OS !== 'web') {
+        Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
+      }
     };
   }, []);
 
@@ -99,8 +173,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         await fetchUserProfile(session.user.id);
         try {
-          const { customerInfo } = await Purchases.logIn(session.user.id);
-          setCustomerInfo(customerInfo);
+          if (Platform.OS !== 'web') {
+            const { customerInfo } = await Purchases.logIn(session.user.id);
+            setCustomerInfo(customerInfo);
+            await syncRevenueCatToSupabase(customerInfo, session.user.id);
+          }
         } catch (e) {
           console.error('RevenueCat logIn error:', e);
         }
@@ -165,7 +242,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     name: string,
     email: string,
     password: string,
-    gradeLevel: 'NSSCO' | 'NSSCAS'
+    gradeLevel: 'NSSCO' | 'NSSCAS',
+    role: 'student' | 'teacher'
   ): Promise<boolean> => {
     try {
       const { data, error } = await supabase.auth.signUp({
@@ -175,6 +253,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           data: {
             name,
             grade_level: gradeLevel,
+            role,
           },
         },
       });
@@ -276,7 +355,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     await supabase.auth.signOut();
     try {
-      await Purchases.logOut();
+      if (Platform.OS !== 'web') {
+        await Purchases.logOut();
+      }
     } catch (e) {
       console.error('RevenueCat logOut error:', e);
     }
@@ -412,7 +493,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   return (
-    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions }}>
+    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions }}>
       {children}
     </UserContext.Provider>
   );
