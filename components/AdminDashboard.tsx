@@ -71,6 +71,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [quizCount, setQuizCount] = useState(0);
   const [schoolsList, setSchoolsList] = useState<any[]>([]);
+  const [pendingSchoolRequests, setPendingSchoolRequests] = useState<{ school: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
 
@@ -166,6 +167,19 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     if (noticesRes.data) setNoticesList(noticesRes.data);
     if (timetablesRes.data) setTimetablesList(timetablesRes.data);
 
+    // Compute pending school requests from the fetched users
+    if (usersRes.data) {
+      const counts: Record<string, number> = {};
+      usersRes.data.forEach((u: any) => {
+        if (u.school && !u.school_id) {
+          counts[u.school] = (counts[u.school] || 0) + 1;
+        }
+      });
+      setPendingSchoolRequests(
+        Object.entries(counts).map(([school, count]) => ({ school, count }))
+      );
+    }
+
     setLoading(false);
   };
 
@@ -175,16 +189,23 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('schools').insert({
+    const { data, error } = await supabase.from('schools').insert({
       name: newSchoolName.trim(),
       code: newSchoolCode.trim() || null,
       primary_color: newSchoolPrimaryColor.trim() || '#6200EE',
       accent_color: newSchoolAccentColor.trim() || '#03DAC6',
-    });
+    }).select('id').single();
     setSaving(false);
     if (error) {
       Alert.alert('Error', 'Failed to add school: ' + error.message);
-    } else {
+    } else if (data) {
+      // Auto-link pending users who requested this exact school name
+      await supabase
+        .from('users')
+        .update({ school_id: data.id, school_locked: true })
+        .eq('school', newSchoolName.trim())
+        .is('school_id', null);
+
       setShowSchoolForm(false);
       setNewSchoolName('');
       setNewSchoolCode('');
@@ -375,7 +396,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 const p = payments.find(pay => pay.id === paymentId);
                 if (p?.user_id) {
                   const expiry = new Date();
-                  const isYearly = p.amount >= 300 || p.plan_type === 'yearly';
+                  const isYearly = p.amount >= 540 || p.plan_type === 'yearly';
                   const daysToAdd = isYearly ? 365 : 30;
                   expiry.setDate(expiry.getDate() + daysToAdd);
 
@@ -855,6 +876,38 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Add New School</Text>
               </TouchableOpacity>
+
+              {/* Pending School Requests */}
+              {pendingSchoolRequests.length > 0 && (
+                <View style={{ marginBottom: SPACING.lg }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, marginBottom: SPACING.md }}>
+                    <Ionicons name="time" size={20} color={'#F59E0B'} />
+                    <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>Pending School Requests ({pendingSchoolRequests.length})</Text>
+                  </View>
+                  {pendingSchoolRequests.map((req) => (
+                    <View key={req.school} style={[styles.adminCard, { borderLeftWidth: 3, borderLeftColor: '#F59E0B' }]}>
+                      <View style={styles.adminCardHeader}>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.adminCardTitle}>{req.school}</Text>
+                          <Text style={{ ...FONTS.small, color: COLORS.textSecondary, marginTop: 2 }}>
+                            {req.count} user{req.count > 1 ? 's' : ''} requesting this school
+                          </Text>
+                        </View>
+                        <TouchableOpacity
+                          style={[styles.schoolApproveBtn, { backgroundColor: '#10B981' }]}
+                          onPress={() => {
+                            setNewSchoolName(req.school);
+                            setShowSchoolForm(true);
+                          }}
+                        >
+                          <Ionicons name="checkmark-circle" size={16} color={COLORS.white} />
+                          <Text style={{ ...FONTS.caption, color: COLORS.white, fontWeight: '700', marginLeft: 4 }}>Approve</Text>
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
               
               {schoolsList.map(school => (
                 <View key={school.id} style={styles.adminCard}>
@@ -1331,6 +1384,7 @@ const styles = StyleSheet.create({
   adminCardSub: { ...FONTS.small, color: COLORS.textMuted, marginTop: 2 },
   adminCardActions: { flexDirection: 'row', gap: SPACING.sm },
   actionBtn: { width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  schoolApproveBtn: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: SPACING.md, paddingVertical: SPACING.sm, borderRadius: RADIUS.sm },
   userRow: { flexDirection: 'row', alignItems: 'center' },
   userAvatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.primary + '15', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
   userAvatarText: { ...FONTS.bodyBold, color: COLORS.primary },

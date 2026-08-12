@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -21,16 +22,29 @@ export default function SchoolHubScreen() {
   const fetchSchoolHubData = async () => {
     setLoading(true);
     
-    // Fetch the specific school's theme and data if they have a school_id
-    if (user?.school_id) {
-      const { data: sData } = await supabase.from('schools').select('*').eq('id', user.school_id).single();
+    let currentSchoolId = user?.school_id;
+
+    // Fetch the specific school's theme and data
+    if (currentSchoolId) {
+      const { data: sData } = await supabase.from('schools').select('*').eq('id', currentSchoolId).single();
       if (sData) setSchoolData(sData);
+    } else if (user?.school) {
+      // Fallback: search by name if they haven't been linked by UUID yet
+      const { data: sData } = await supabase.from('schools').select('*').ilike('name', user.school).single();
+      if (sData) {
+        setSchoolData(sData);
+        currentSchoolId = sData.id;
+        if (user?.id) {
+          // Silently update the user profile so it's linked permanently
+          supabase.from('users').update({ school_id: sData.id }).eq('id', user.id).then();
+        }
+      }
     }
 
     // Fetch announcements (National: school_id is null, or matching user's school)
     let annQuery = supabase.from('school_announcements').select('*').order('created_at', { ascending: false });
-    if (user?.school_id) {
-      annQuery = annQuery.or(`school_id.eq.${user.school_id},school_id.is.null`);
+    if (currentSchoolId) {
+      annQuery = annQuery.or(`school_id.eq.${currentSchoolId},school_id.is.null`);
     } else {
       annQuery = annQuery.is('school_id', null);
     }
@@ -39,8 +53,8 @@ export default function SchoolHubScreen() {
 
     // Fetch timetables
     let timeQuery = supabase.from('school_timetables').select('*').order('exam_date', { ascending: true });
-    if (user?.school_id) {
-      timeQuery = timeQuery.or(`school_id.eq.${user.school_id},school_id.is.null`);
+    if (currentSchoolId) {
+      timeQuery = timeQuery.or(`school_id.eq.${currentSchoolId},school_id.is.null`);
     } else {
       timeQuery = timeQuery.is('school_id', null);
     }
@@ -78,7 +92,12 @@ export default function SchoolHubScreen() {
   return (
     <View style={styles.container}>
       {/* Dynamic Header Banner */}
-      <View style={[styles.header, { backgroundColor: primaryColor }]}>
+      <LinearGradient 
+        colors={[primaryColor, accentColor]} 
+        start={{ x: 0, y: 0 }} 
+        end={{ x: 1, y: 1 }} 
+        style={styles.header}
+      >
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>My School Hub</Text>
         </View>
@@ -93,13 +112,13 @@ export default function SchoolHubScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.schoolName}>{schoolName}</Text>
             {schoolData?.code ? (
-              <View style={[styles.schoolCodeBadge, { backgroundColor: accentColor }]}>
+              <View style={[styles.schoolCodeBadge, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
                 <Text style={styles.schoolCodeText}>{schoolData.code}</Text>
               </View>
             ) : null}
           </View>
         </View>
-      </View>
+      </LinearGradient>
 
       {/* Next Exam Countdown */}
       {Boolean(nextExam) && (

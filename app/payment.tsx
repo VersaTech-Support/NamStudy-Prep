@@ -32,7 +32,7 @@ interface Payment {
 
 const BANK_DETAILS = {
   bankName: 'First National Bank (FNB) Namibia',
-  accountName: 'NamMath Prep',
+  accountName: 'NamStudy Prep',
   accountNumber: '62315274891',
   branchCode: '280172',
   branchName: 'Windhoek Main Branch',
@@ -41,7 +41,7 @@ const BANK_DETAILS = {
 };
 
 export default function PaymentScreen() {
-  const { user, isVIP, customerInfo, manageSubscriptions } = useUser();
+  const { user, isVIP, customerInfo, manageSubscriptions, refreshSubscription } = useUser();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -55,7 +55,7 @@ export default function PaymentScreen() {
   // Subscription plan selection state
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('monthly');
 
-  const amount = selectedPlan === 'monthly' ? 30 : 300;
+  const amount = selectedPlan === 'monthly' ? 60 : 540;
   const planTitleText = selectedPlan === 'monthly' ? 'VIP Monthly Access' : 'VIP Yearly Access (Best Value)';
 
   const hasRevenueCatSub = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
@@ -68,12 +68,14 @@ export default function PaymentScreen() {
       });
 
       if (result === 'PURCHASED' || result === 'RESTORED') {
+        await refreshSubscription();
         Alert.alert(
           '🎉 Welcome to Pro!',
           'Your NamibStudy Prep Pro access has been activated instantly. Enjoy all premium features!',
           [{ text: 'Awesome!', onPress: () => router.back() }]
         );
       } else if (result === 'NOT_PRESENTED') {
+        await refreshSubscription();
         Alert.alert(
           'Already Active',
           'You already have NamibStudy Prep Pro access!',
@@ -114,7 +116,7 @@ export default function PaymentScreen() {
         const pending = data.find((p: Payment) => p.status === 'pending');
         if (pending) {
           setPayment(pending);
-          setSelectedPlan((pending.amount >= 300 || pending.plan_type === 'yearly') ? 'yearly' : 'monthly');
+          setSelectedPlan((pending.amount >= 540 || pending.plan_type === 'yearly') ? 'yearly' : 'monthly');
           setStep('details');
         }
       }
@@ -184,8 +186,8 @@ export default function PaymentScreen() {
     setLoading(true);
     console.log('Payment Confirmation initiated by:', user.email);
 
-    const planDesc = payment.amount >= 300 ? 'Yearly Plan (N$300)' : 'Monthly Plan (N$30)';
-    const message = `Hi! I've just made a payment of N$${payment.amount} (${planDesc}) for NamMath VIP.\n\nMy Email: ${user.email}\nReference: ${payment.reference_number}`;
+    const planDesc = payment.amount >= 540 ? 'Yearly Plan (N$540)' : 'Monthly Plan (N$60)';
+    const message = `Hi! I've just made a payment of N$${payment.amount} (${planDesc}) for NamStudy VIP.\n\nMy Email: ${user.email}\nReference: ${payment.reference_number}`;
     const whatsappUrl = `https://wa.me/264816113313?text=${encodeURIComponent(message)}`;
 
     try {
@@ -466,7 +468,7 @@ export default function PaymentScreen() {
                 activeOpacity={0.8}
               >
                 <Text style={[styles.planCardTitle, selectedPlan === 'monthly' && styles.planCardTitleActive]}>Monthly</Text>
-                <Text style={[styles.planCardPrice, selectedPlan === 'monthly' && styles.planCardPriceActive]}>N$30</Text>
+                <Text style={[styles.planCardPrice, selectedPlan === 'monthly' && styles.planCardPriceActive]}>N$60</Text>
                 <Text style={styles.planCardSub}>Per month</Text>
               </TouchableOpacity>
 
@@ -476,11 +478,11 @@ export default function PaymentScreen() {
                 activeOpacity={0.8}
               >
                 <View style={styles.discountBadge}>
-                  <Text style={styles.discountBadgeText}>Save N$60</Text>
+                  <Text style={styles.discountBadgeText}>Save N$180</Text>
                 </View>
                 <Text style={[styles.planCardTitle, selectedPlan === 'yearly' && styles.planCardTitleActive]}>Yearly</Text>
-                <Text style={[styles.planCardPrice, selectedPlan === 'yearly' && styles.planCardPriceActive]}>N$300</Text>
-                <Text style={styles.planCardSub}>12 Months (2 Free)</Text>
+                <Text style={[styles.planCardPrice, selectedPlan === 'yearly' && styles.planCardPriceActive]}>N$540</Text>
+                <Text style={styles.planCardSub}>12 Months (3 Free)</Text>
               </TouchableOpacity>
             </View>
 
@@ -660,7 +662,7 @@ export default function PaymentScreen() {
               <Text style={styles.confirmSummaryTitle}>Payment Summary</Text>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Plan</Text>
-                <Text style={styles.summaryValue}>{payment.amount >= 300 ? 'VIP Yearly Plan' : 'VIP Monthly Plan'}</Text>
+                <Text style={styles.summaryValue}>{payment.amount >= 540 ? 'VIP Yearly Plan' : 'VIP Monthly Plan'}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Amount</Text>
@@ -668,7 +670,7 @@ export default function PaymentScreen() {
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Duration</Text>
-                <Text style={styles.summaryValue}>{payment.amount >= 300 ? '365 days (1 Year)' : '30 days (1 Month)'}</Text>
+                <Text style={styles.summaryValue}>{payment.amount >= 540 ? '365 days (1 Year)' : '30 days (1 Month)'}</Text>
               </View>
               <View style={styles.summaryRow}>
                 <Text style={styles.summaryLabel}>Method</Text>

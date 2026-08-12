@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   Dimensions,
   Platform,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -18,7 +19,7 @@ import { supabase } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { user, isVIP, streak } = useUser();
+  const { user, isVIP, isAdmin, streak } = useUser();
   const router = useRouter();
   const [authVisible, setAuthVisible] = useState(false);
   const [paperCount, setPaperCount] = useState(0);
@@ -43,15 +44,30 @@ export default function HomeScreen() {
   }, []);
 
   const fetchCounts = async () => {
+    // 1. Fetch paper and quiz counts
     const { count: pCount } = await supabase.from('papers').select('*', { count: 'exact', head: true });
     const { count: qCount } = await supabase.from('quizzes').select('*', { count: 'exact', head: true });
-    const { count: sCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'student');
-    const { count: tCount } = await supabase.from('users').select('*', { count: 'exact', head: true }).eq('role', 'teacher');
+    
+    // 2. Fetch all users to parse roles accurately
+    const { data: usersData } = await supabase.from('users').select('role, is_admin');
+    
+    let parsedStudentCount = 0;
+    let parsedTeacherCount = 0;
+
+    if (usersData) {
+      usersData.forEach((u: any) => {
+        if (u.role === 'teacher') {
+          parsedTeacherCount++;
+        } else if (u.role === 'student' || (!u.role && !u.is_admin)) {
+          parsedStudentCount++;
+        }
+      });
+    }
     
     if (pCount) setPaperCount(pCount);
     if (qCount) setQuizCount(qCount);
-    if (sCount) setStudentCount(sCount);
-    if (tCount) setTeacherCount(tCount);
+    setStudentCount(parsedStudentCount);
+    setTeacherCount(parsedTeacherCount);
   };
 
   const stats = [
@@ -115,6 +131,14 @@ export default function HomeScreen() {
 
 
 
+  const getRoleTag = () => {
+    if (!user) return "";
+    if (isAdmin) return "Super Admin";
+    if (user.is_school_admin) return "School Admin";
+    if (user.role === 'teacher') return "Teacher";
+    return user.grade_level || "NSSCO";
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView showsVerticalScrollIndicator={false}>
@@ -131,13 +155,18 @@ export default function HomeScreen() {
               </View>
               {user ? (
                 <View style={styles.userBadge}>
-                  <Ionicons name="person-circle" size={20} color={COLORS.white} />
-                  <Text style={styles.userName}>{user.name.split(' ')[0]}</Text>
-                  {isVIP && (
-                    <View style={styles.vipTag}>
-                      <Text style={styles.vipTagText}>VIP</Text>
-                    </View>
+                  {user.avatar_url ? (
+                    <Image source={{ uri: user.avatar_url }} style={styles.headerAvatar} />
+                  ) : (
+                    <Ionicons name="person-circle" size={20} color={COLORS.white} />
                   )}
+                  <View style={{ marginLeft: 4 }}>
+                    <Text style={styles.userName}>{user.name.split(' ')[0]}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                      <Text style={styles.roleTagText}>{getRoleTag()}</Text>
+                      {isVIP && <Ionicons name="diamond" size={10} color={COLORS.gold} />}
+                    </View>
+                  </View>
                 </View>
               ) : (
                 <TouchableOpacity style={styles.signInBtn} onPress={() => setAuthVisible(true)}>
@@ -413,16 +442,15 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '600',
   },
-  vipTag: {
-    backgroundColor: COLORS.gold,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    borderRadius: 4,
+  headerAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
   },
-  vipTagText: {
+  roleTagText: {
     fontSize: 9,
-    fontWeight: '800',
-    color: COLORS.white,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
   },
   signInBtn: {
     flexDirection: 'row',

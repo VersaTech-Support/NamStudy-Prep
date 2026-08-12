@@ -48,6 +48,7 @@ interface UserContextType {
   toggleBookmark: (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => Promise<void>;
   isBookmarked: (item_id: string) => boolean;
   manageSubscriptions: () => Promise<void>;
+  refreshSubscription: () => Promise<void>;
   uploadSchoolLogo: (file: { uri: string; type: string; name: string }, schoolId: string) => Promise<string | null>;
 }
 
@@ -196,11 +197,30 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const fetchUserProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      let data = null;
+      let error = null;
+      // Retry loop to handle the Supabase auth trigger race condition (slow local DBs)
+      for (let i = 0; i < 5; i++) {
+        const result = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', userId)
+          .maybeSingle();
+        
+        data = result.data;
+        error = result.error;
+
+        if (error) {
+          break; // Hard DB error, stop retrying
+        }
+
+        if (!data) {
+          // If 0 rows returned (trigger hasn't fired yet), wait 1000ms and retry
+          await new Promise(res => setTimeout(res, 1000));
+        } else {
+          break; // Success, exit retry loop
+        }
+      }
 
       if (error) {
         console.error('Error fetching user profile:', error.message);
@@ -273,7 +293,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return false;
       }
 
-      if (data.user) {
+      if (data.user && data.session) {
         await fetchUserProfile(data.user.id);
       }
       return true;
@@ -494,6 +514,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const refreshSubscription = async () => {
+    try {
+      if (Platform.OS === 'web') return;
+      const info = await Purchases.getCustomerInfo();
+      setCustomerInfo(info);
+      const currentUserId = userRef.current?.id;
+      if (currentUserId) {
+        await syncRevenueCatToSupabase(info, currentUserId);
+      }
+    } catch (error) {
+      console.error('Error refreshing subscription:', error);
+    }
+  };
+
   const manageSubscriptions = async () => {
     try {
       if (Platform.OS === 'android') {
@@ -541,7 +575,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   return (
-    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, uploadSchoolLogo }}>
+    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
       {children}
     </UserContext.Provider>
   );

@@ -135,14 +135,21 @@ export default function EditProfileScreen() {
             />
           </View>
 
-          <Text style={styles.label}>School Name (Optional)</Text>
-          <View style={styles.inputContainer}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs }}>
+            <Text style={styles.label}>School Name (Locked)</Text>
+            {Boolean(school) && !user?.school_id && (
+              <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                <Text style={{ fontSize: 9, fontWeight: '800', color: '#FFFFFF' }}>PENDING APPROVAL</Text>
+              </View>
+            )}
+          </View>
+          <View style={[styles.inputContainer, { backgroundColor: COLORS.surfaceAlt }]}>
             <Ionicons name="school-outline" size={18} color={COLORS.textMuted} />
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: COLORS.textMuted }]}
               value={school}
-              onChangeText={setSchool}
-              placeholder="e.g. Windhoek High School"
+              editable={false}
+              placeholder="Not linked to a school"
               placeholderTextColor={COLORS.textMuted}
             />
           </View>

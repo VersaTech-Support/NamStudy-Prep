@@ -10,6 +10,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
@@ -37,13 +38,13 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [schools, setSchools] = useState<{ id: string; name: string }[]>([]);
+  const [schools, setSchools] = useState<{ id: string; name: string; logo_url?: string }[]>([]);
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [customSchoolName, setCustomSchoolName] = useState('');
 
   useEffect(() => {
     if (visible && !isLogin) {
-      supabase.from('schools').select('id, name').order('name').then(({ data }) => {
+      supabase.from('schools').select('id, name, logo_url').order('name').then(({ data }) => {
         if (data) setSchools(data);
       });
     }
@@ -77,7 +78,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
         }
       } else {
         // Passing password to signup function
-        const finalSchoolName = schoolId === 'other' ? customSchoolName : null;
+        const finalSchoolName = schoolId === 'other' ? customSchoolName.trim() || null : null;
         const finalSchoolId = schoolId === 'other' ? null : schoolId;
         const success = await signup(name, email, password, gradeLevel, role, finalSchoolId, finalSchoolName);
         if (success) {
@@ -111,6 +112,16 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
       if (verifyError) {
         setError(verifyError.message);
       } else {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const finalSchoolName = schoolId === 'other' ? customSchoolName.trim() || null : null;
+          const finalSchoolId = schoolId === 'other' ? null : schoolId;
+          await supabase.from('users').update({
+            school: finalSchoolName,
+            school_id: finalSchoolId,
+            school_locked: !!finalSchoolId
+          }).eq('id', session.user.id);
+        }
         onClose();
         resetForm();
       }
@@ -157,7 +168,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
               <Ionicons name={showOtp ? "mail-open" : "school"} size={32} color={COLORS.primary} />
             </View>
             <Text style={styles.title}>
-              {showOtp ? 'Verify Your Email' : isLogin ? 'Welcome Back!' : 'Join NamMath Prep'}
+              {showOtp ? 'Verify Your Email' : isLogin ? 'Welcome Back!' : 'Join NamStudy Prep'}
             </Text>
             <Text style={styles.subtitle}>
               {showOtp 
@@ -351,10 +362,15 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
                         {schools.map((school) => (
                           <TouchableOpacity
                             key={school.id}
-                            style={{ padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight, backgroundColor: schoolId === school.id ? COLORS.primary + '15' : 'transparent' }}
+                            style={{ padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight, backgroundColor: schoolId === school.id ? COLORS.primary + '15' : 'transparent', flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}
                             onPress={() => setSchoolId(school.id)}
                           >
-                            <Text style={{ ...FONTS.body, color: schoolId === school.id ? COLORS.primary : COLORS.textPrimary }}>
+                            {school.logo_url ? (
+                              <Image source={{ uri: school.logo_url }} style={{ width: 24, height: 24, borderRadius: 12 }} />
+                            ) : (
+                              <Ionicons name="school-outline" size={20} color={schoolId === school.id ? COLORS.primary : COLORS.textMuted} />
+                            )}
+                            <Text style={{ ...FONTS.body, color: schoolId === school.id ? COLORS.primary : COLORS.textPrimary, flex: 1 }}>
                               {school.name}
                             </Text>
                           </TouchableOpacity>
@@ -370,15 +386,22 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
                       </ScrollView>
                       
                       {schoolId === 'other' && (
-                        <View style={[styles.inputContainer, { marginTop: SPACING.sm }]}>
-                          <Ionicons name="school-outline" size={18} color={COLORS.textMuted} />
-                          <TextInput
-                            style={styles.input}
-                            placeholder="Enter your school name"
-                            placeholderTextColor={COLORS.textMuted}
-                            value={customSchoolName}
-                            onChangeText={setCustomSchoolName}
-                          />
+                        <View style={{ marginTop: SPACING.sm, gap: SPACING.sm }}>
+                          <View style={styles.inputContainer}>
+                            <Ionicons name="school-outline" size={18} color={COLORS.textMuted} />
+                            <TextInput
+                              style={styles.input}
+                              placeholder="Enter your school name"
+                              placeholderTextColor={COLORS.textMuted}
+                              value={customSchoolName}
+                              onChangeText={setCustomSchoolName}
+                            />
+                          </View>
+                          <View style={{ padding: SPACING.sm, backgroundColor: '#FFF3CD', borderRadius: RADIUS.sm }}>
+                            <Text style={{ ...FONTS.small, color: '#856404', textAlign: 'center' }}>
+                              ⏳ Your school will appear as "Pending" until an admin reviews and approves it.
+                            </Text>
+                          </View>
                         </View>
                       )}
                     </View>

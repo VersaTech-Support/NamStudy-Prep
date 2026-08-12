@@ -44,7 +44,7 @@ export default function UpgradeModal({ visible, onClose, onUpgrade }: UpgradeMod
     }
   };
 
-  const amount = selectedPlan === 'monthly' ? 30 : 300;
+  const amount = selectedPlan === 'monthly' ? 60 : 540;
 
   return (
     <Modal
@@ -93,7 +93,7 @@ export default function UpgradeModal({ visible, onClose, onUpgrade }: UpgradeMod
               activeOpacity={0.8}
             >
               <Text style={[styles.planTabText, selectedPlan === 'monthly' && styles.planTabTextActive]}>
-                Monthly (N$30)
+                Monthly (N$60)
               </Text>
             </TouchableOpacity>
 
@@ -103,10 +103,10 @@ export default function UpgradeModal({ visible, onClose, onUpgrade }: UpgradeMod
               activeOpacity={0.8}
             >
               <View style={styles.modalDiscountBadge}>
-                <Text style={styles.modalDiscountText}>Save N$60</Text>
+                <Text style={styles.modalDiscountText}>Save N$180</Text>
               </View>
               <Text style={[styles.planTabText, selectedPlan === 'yearly' && styles.planTabTextActive]}>
-                Yearly (N$300)
+                Yearly (N$540)
               </Text>
             </TouchableOpacity>
           </View>
@@ -114,7 +114,7 @@ export default function UpgradeModal({ visible, onClose, onUpgrade }: UpgradeMod
           {/* Price Box */}
           <View style={styles.priceContainer}>
             <Text style={styles.priceLabel}>
-              {selectedPlan === 'monthly' ? 'VIP Monthly Access' : 'VIP Yearly Access (2 Months Free)'}
+              {selectedPlan === 'monthly' ? 'VIP Monthly Access' : 'VIP Yearly Access (3 Months Free)'}
             </Text>
             <View style={styles.priceRow}>
               <Text style={styles.currency}>N$</Text>
@@ -143,7 +143,7 @@ export default function UpgradeModal({ visible, onClose, onUpgrade }: UpgradeMod
           <View style={styles.socialProof}>
             <Ionicons name="people" size={14} color={COLORS.textMuted} />
             <Text style={styles.socialProofText}>
-              Join 2,400+ Namibian students already using NamMath VIP
+              Join 2,400+ Namibian students already using NamStudy VIP
             </Text>
           </View>
         </View>

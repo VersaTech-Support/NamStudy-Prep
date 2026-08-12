@@ -181,6 +181,11 @@ export default function ProfileScreen() {
               <Ionicons name="school" size={14} color={COLORS.textSecondary} style={{ marginRight: SPACING.xs }} />
               <Text style={{ ...FONTS.caption, color: COLORS.textSecondary, marginRight: SPACING.xs }}>{user.school}</Text>
               {user.school_locked && <Ionicons name="lock-closed" size={12} color={COLORS.textMuted} />}
+              {!user.school_id && (
+                <View style={{ backgroundColor: '#F59E0B', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, marginLeft: 4 }}>
+                  <Text style={{ fontSize: 9, fontWeight: '800', color: COLORS.white }}>PENDING</Text>
+                </View>
+              )}
             </View>
           )}
           {user.school_locked && (
@@ -236,7 +241,7 @@ export default function ProfileScreen() {
               <View style={{ flex: 1 }}><Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>Upgrade to VIP</Text><Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>Get solutions & unlimited quizzes</Text></View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.goldLight, padding: SPACING.md, borderRadius: RADIUS.sm }}>
-              <Text style={{ ...FONTS.caption, color: COLORS.goldDark, fontWeight: '700' }}>N$30/month via FNB Transfer</Text>
+              <Text style={{ ...FONTS.caption, color: COLORS.goldDark, fontWeight: '700' }}>From N$60/month via FNB Transfer</Text>
               <Ionicons name="arrow-forward" size={18} color={COLORS.gold} />
             </View>
           </TouchableOpacity>
