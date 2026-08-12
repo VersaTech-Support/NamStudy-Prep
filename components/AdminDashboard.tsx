@@ -120,19 +120,41 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [rejectPaymentId, setRejectPaymentId] = useState<string | null>(null);
   const [rejectNote, setRejectNote] = useState('');
 
+  // Notice form states
+  const [showNoticeForm, setShowNoticeForm] = useState(false);
+  const [noticeTitle, setNoticeTitle] = useState('');
+  const [noticeContent, setNoticeContent] = useState('');
+  const [noticeIsUrgent, setNoticeIsUrgent] = useState(false);
+  const [noticeSchoolId, setNoticeSchoolId] = useState<string | null>(null);
+  const [noticesList, setNoticesList] = useState<any[]>([]);
+
+  // Timetable form states
+  const [showTimetableForm, setShowTimetableForm] = useState(false);
+  const [timetableCurriculum, setTimetableCurriculum] = useState('NSSCO');
+  const [timetableSubject, setTimetableSubject] = useState('Mathematics');
+  const [timetablePaper, setTimetablePaper] = useState('Paper 1');
+  const [timetableDate, setTimetableDate] = useState(new Date().toISOString().split('T')[0]);
+  const [timetableTime, setTimetableTime] = useState('08:00 AM');
+  const [timetableDuration, setTimetableDuration] = useState('2 hours');
+  const [timetableVenue, setTimetableVenue] = useState('Main Hall');
+  const [timetableSchoolId, setTimetableSchoolId] = useState<string | null>(null);
+  const [timetablesList, setTimetablesList] = useState<any[]>([]);
+
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
     setLoading(true);
-    const [papersRes, usersRes, quizzesRes, paymentsRes, subjectsRes, schoolsRes] = await Promise.all([
+    const [papersRes, usersRes, quizzesRes, paymentsRes, subjectsRes, schoolsRes, noticesRes, timetablesRes] = await Promise.all([
       supabase.from('papers').select('*').order('year', { ascending: false }),
       supabase.from('users').select('*').order('created_at', { ascending: false }),
       supabase.from('quizzes').select('*', { count: 'exact', head: true }),
       supabase.from('payments').select('*, users(name, email, grade_level)').order('created_at', { ascending: false }),
       supabase.from('subjects').select('name').order('name'),
-      supabase.from('schools').select('*').order('name')
+      supabase.from('schools').select('*').order('name'),
+      supabase.from('school_announcements').select('*, schools(name)').order('created_at', { ascending: false }),
+      supabase.from('school_timetables').select('*, schools(name)').order('exam_date', { ascending: true })
     ]);
 
     if (papersRes.data) setPapers(papersRes.data);
@@ -141,6 +163,8 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     if (paymentsRes.data) setPayments(paymentsRes.data as any);
     if (subjectsRes.data) setAvailableSubjects(subjectsRes.data.map((s: { name: string }) => s.name));
     if (schoolsRes.data) setSchoolsList(schoolsRes.data);
+    if (noticesRes.data) setNoticesList(noticesRes.data);
+    if (timetablesRes.data) setTimetablesList(timetablesRes.data);
 
     setLoading(false);
   };
@@ -208,6 +232,64 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
       console.error(error);
       Alert.alert('Error', 'An unexpected error occurred during upload');
     }
+  };
+
+  // NEW: handleAddNotice function
+  const handleAddNotice = async () => {
+    if (!noticeTitle.trim() || !noticeContent.trim()) {
+      Alert.alert('Error', 'Title and content are required.');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('school_announcements').insert({
+      title: noticeTitle.trim(),
+      content: noticeContent.trim(),
+      is_urgent: noticeIsUrgent,
+      school_id: noticeSchoolId || null,
+      author_id: user?.id || null,
+    });
+    setSaving(false);
+    
+    if (error) {
+      Alert.alert('Error', 'Failed to add notice: ' + error.message);
+    } else {
+      setShowNoticeForm(false);
+      setNoticeTitle('');
+      setNoticeContent('');
+      setNoticeIsUrgent(false);
+      setNoticeSchoolId(null);
+      fetchData();
+    }
+  };
+
+  // NEW: handleAddTimetable function
+  const handleAddTimetable = async () => {
+    if (!timetableSubject.trim()) {
+      Alert.alert('Error', 'Subject name is required.');
+      return;
+    }
+    setSaving(true);
+    const { error } = await supabase.from('school_timetables').insert({
+      curriculum: timetableCurriculum,
+      subject_name: timetableSubject.trim(),
+      paper_code: timetablePaper.trim(),
+      exam_date: timetableDate,
+      start_time: timetableTime.trim(),
+      duration: timetableDuration.trim(),
+      venue: timetableVenue.trim(),
+      school_id: timetableSchoolId || null,
+    });
+    
+    if (error) {
+      Alert.alert('Error', 'Failed to add timetable: ' + error.message);
+    } else {
+      setShowTimetableForm(false);
+      setTimetableSubject('');
+      setTimetablePaper('');
+      setTimetableSchoolId(null);
+      fetchData();
+    }
+    setSaving(false);
   };
 
   // NEW: handleAddSubject function
@@ -806,21 +888,47 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
 
           {activeTab === 'notices' && (
             <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert('Add Notice', 'Coming Soon!')}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowNoticeForm(true)}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Post Notice</Text>
               </TouchableOpacity>
               <Text style={styles.infoText}>Manage notice board announcements here.</Text>
+              
+              {noticesList.map(notice => (
+                <View key={notice.id} style={styles.adminCard}>
+                  <View style={styles.adminCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.adminCardTitle}>{notice.title}</Text>
+                      <Text style={[styles.adminCardSub, { marginTop: 4 }]}>
+                        {notice.schools?.name || 'National'} {notice.is_urgent && '• URGENT'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
           )}
 
           {activeTab === 'timetables' && (
             <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert('Add Timetable', 'Coming Soon!')}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => setShowTimetableForm(true)}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Add Timetable Event</Text>
               </TouchableOpacity>
-              <Text style={styles.infoText}>Manage examination timetables here.</Text>
+              <Text style={styles.infoText}>Manage school and national exam timetables.</Text>
+              
+              {timetablesList.map(item => (
+                <View key={item.id} style={styles.adminCard}>
+                  <View style={styles.adminCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.adminCardTitle}>{item.subject_name} ({item.paper_code})</Text>
+                      <Text style={[styles.adminCardSub, { marginTop: 4 }]}>
+                        {item.exam_date} at {item.start_time} • {item.schools?.name || 'National'}
+                      </Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
             </View>
           )}
 
@@ -1029,6 +1137,140 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
           </View>
         </View>
       </Modal>
+
+      {/* NEW NOTICE MODAL */}
+      <Modal visible={showNoticeForm} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Post Notice</Text>
+                <TouchableOpacity onPress={() => setShowNoticeForm(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.formLabel}>Title *</Text>
+              <TextInput style={styles.formInput} placeholder="e.g. Exam Updates" placeholderTextColor={COLORS.textMuted} value={noticeTitle} onChangeText={setNoticeTitle} />
+
+              <Text style={styles.formLabel}>Content *</Text>
+              <TextInput style={[styles.formInput, { height: 100 }]} placeholder="Notice details..." placeholderTextColor={COLORS.textMuted} value={noticeContent} onChangeText={setNoticeContent} multiline />
+              
+              <Text style={styles.formLabel}>Target School</Text>
+              <View style={styles.pickerContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.xs, paddingHorizontal: SPACING.xs }}>
+                  <TouchableOpacity
+                    style={[styles.gradePill, noticeSchoolId === null && styles.gradePillActive]}
+                    onPress={() => setNoticeSchoolId(null)}
+                  >
+                    <Text style={[styles.gradePillText, noticeSchoolId === null && styles.gradePillTextActive]}>National / All</Text>
+                  </TouchableOpacity>
+                  {schoolsList.map(school => (
+                    <TouchableOpacity
+                      key={school.id}
+                      style={[styles.gradePill, noticeSchoolId === school.id && styles.gradePillActive]}
+                      onPress={() => setNoticeSchoolId(school.id)}
+                    >
+                      <Text style={[styles.gradePillText, noticeSchoolId === school.id && styles.gradePillTextActive]}>{school.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <TouchableOpacity style={styles.uploadBtn} onPress={() => setNoticeIsUrgent(!noticeIsUrgent)}>
+                <Ionicons name={noticeIsUrgent ? "alert-circle" : "alert-circle-outline"} size={24} color={noticeIsUrgent ? COLORS.red : COLORS.primary} />
+                <Text style={[styles.uploadBtnText, { color: noticeIsUrgent ? COLORS.red : COLORS.primary }]}>Mark as Urgent</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleAddNotice} disabled={saving}>
+                {saving ? <ActivityIndicator color={COLORS.white} /> : (
+                  <><Ionicons name="paper-plane" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Post Notice</Text></>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+
+      {/* NEW TIMETABLE MODAL */}
+      <Modal visible={showTimetableForm} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Add Timetable Event</Text>
+                <TouchableOpacity onPress={() => setShowTimetableForm(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.formLabel}>Target School</Text>
+              <View style={styles.pickerContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.xs, paddingHorizontal: SPACING.xs }}>
+                  <TouchableOpacity
+                    style={[styles.gradePill, timetableSchoolId === null && styles.gradePillActive]}
+                    onPress={() => setTimetableSchoolId(null)}
+                  >
+                    <Text style={[styles.gradePillText, timetableSchoolId === null && styles.gradePillTextActive]}>National / All</Text>
+                  </TouchableOpacity>
+                  {schoolsList.map(school => (
+                    <TouchableOpacity
+                      key={school.id}
+                      style={[styles.gradePill, timetableSchoolId === school.id && styles.gradePillActive]}
+                      onPress={() => setTimetableSchoolId(school.id)}
+                    >
+                      <Text style={[styles.gradePillText, timetableSchoolId === school.id && styles.gradePillTextActive]}>{school.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <Text style={styles.formLabel}>Curriculum</Text>
+              <View style={styles.pickerContainer}>
+                {['NSSCO', 'NSSCAS'].map(level => (
+                  <TouchableOpacity key={level} style={[styles.gradePill, timetableCurriculum === level && styles.gradePillActive]} onPress={() => setTimetableCurriculum(level)}>
+                    <Text style={[styles.gradePillText, timetableCurriculum === level && styles.gradePillTextActive]}>{level}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.formLabel}>Subject Name *</Text>
+              <TextInput style={styles.formInput} placeholder="e.g. Mathematics" placeholderTextColor={COLORS.textMuted} value={timetableSubject} onChangeText={setTimetableSubject} />
+
+              <View style={styles.formRow}>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Paper Code</Text>
+                  <TextInput style={styles.formInput} placeholder="e.g. Paper 1" placeholderTextColor={COLORS.textMuted} value={timetablePaper} onChangeText={setTimetablePaper} />
+                </View>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Exam Date (YYYY-MM-DD)</Text>
+                  <TextInput style={styles.formInput} placeholder="YYYY-MM-DD" placeholderTextColor={COLORS.textMuted} value={timetableDate} onChangeText={setTimetableDate} />
+                </View>
+              </View>
+
+              <View style={styles.formRow}>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Start Time</Text>
+                  <TextInput style={styles.formInput} placeholder="e.g. 08:00 AM" placeholderTextColor={COLORS.textMuted} value={timetableTime} onChangeText={setTimetableTime} />
+                </View>
+                <View style={styles.formHalf}>
+                  <Text style={styles.formLabel}>Duration</Text>
+                  <TextInput style={styles.formInput} placeholder="e.g. 2 hours" placeholderTextColor={COLORS.textMuted} value={timetableDuration} onChangeText={setTimetableDuration} />
+                </View>
+              </View>
+
+              <Text style={styles.formLabel}>Venue</Text>
+              <TextInput style={styles.formInput} placeholder="e.g. Main Hall" placeholderTextColor={COLORS.textMuted} value={timetableVenue} onChangeText={setTimetableVenue} />
+
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleAddTimetable} disabled={saving}>
+                {saving ? <ActivityIndicator color={COLORS.white} /> : (
+                  <><Ionicons name="add-circle" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Save Event</Text></>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -1139,4 +1381,46 @@ const styles = StyleSheet.create({
   successUrlText: { ...FONTS.small, color: COLORS.green, marginTop: 4, fontWeight: '600' },
   saveBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm, backgroundColor: COLORS.primary, borderRadius: RADIUS.md, paddingVertical: 16, marginTop: SPACING.xxl, ...SHADOWS.lg },
   saveBtnText: { ...FONTS.h3, color: COLORS.white },
+  pickerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
+    gap: SPACING.sm,
+  },
+  gradePill: {
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  gradePillActive: {
+    backgroundColor: COLORS.primary + '15',
+    borderColor: COLORS.primary,
+  },
+  gradePillText: {
+    ...FONTS.bodyBold,
+    color: COLORS.textSecondary,
+  },
+  gradePillTextActive: {
+    color: COLORS.primary,
+  },
+  uploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.surfaceAlt,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    borderRadius: RADIUS.md,
+    paddingVertical: SPACING.md,
+    marginBottom: SPACING.md,
+  },
+  uploadBtnText: {
+    ...FONTS.bodyBold,
+    color: COLORS.primary,
+  },
 });

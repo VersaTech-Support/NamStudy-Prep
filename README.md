@@ -1,26 +1,29 @@
 # NamStudy Prep
 
-NamStudy Prep is a mobile application designed for educational exam preparation, specifically tailored for math students. Built with React Native and Expo, it offers an interactive, smooth learning experience on both Android and iOS devices.
+NamStudy Prep is a comprehensive cross-platform mobile application designed to help Namibian students prepare for their NSSCO and NSSCAS exams. Built with React Native and Expo, it offers an interactive, data-driven learning experience on iOS, Android, and the Web.
 
-## Features
+## 🚀 Features
 
-- **Exam Preparation**: Study materials and practice modules focused on math exams.
-- **Cross-Platform**: Runs seamlessly on iOS, Android, and Web using Expo.
-- **Modern UI**: Designed with a clean and intuitive user interface using modern React Native components.
+- **Past Papers & Solutions**: View official exam papers securely through an encrypted, screenshot-protected viewer.
+- **Interactive Quizzes**: Test your knowledge with dynamically generated quizzes and immediate feedback.
+- **My School Hub**: A localized experience customized to your school's branding. Stay updated with school-specific announcements and interactive exam timetables.
+- **AI Tutor**: Get on-demand, instant explanations for difficult concepts directly within the app.
+- **Progress Analytics**: Track your study streaks, view live online user counts, and monitor your quiz performance over time.
+- **Admin Dashboard**: Comprehensive CMS for teachers and administrators to manage users, upload papers, and post notices.
 
-## Development
+## 🛠️ Tech Stack
 
-For detailed instructions on how to install dependencies, run the app in development mode, or build for production, please see the build instructions:
+- **Frontend**: React Native, Expo Router, Vanilla StyleSheet
+- **Backend**: Supabase (Auth, Postgres Database, Storage)
+- **Monetization**: RevenueCat for VIP subscriptions
+- **State Management**: React Context API
+
+## 💻 Development & Build Instructions
+
+For detailed instructions on setting up your local environment, configuring Supabase, and building the application for production, please refer to the build guide:
 
 👉 **[View Build Instructions](BUILD.md)**
 
-## Technologies
-
-- [React Native](https://reactnative.dev/)
-- [Expo](https://expo.dev/)
-- [Expo Router](https://docs.expo.dev/router/introduction/) (File-based routing)
-- [TypeScript](https://www.typescriptlang.org/)
-
-## License
+## 📜 License
 
 Copyright © VersaTech

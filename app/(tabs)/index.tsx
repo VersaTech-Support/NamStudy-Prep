@@ -113,11 +113,7 @@ export default function HomeScreen() {
     },
   ];
 
-  const testimonials = [
-    { name: 'Maria N.', grade: 'Grade 12', text: 'The step-by-step solutions helped me understand calculus. Got an A!', rating: 5 },
-    { name: 'Johannes K.', grade: 'Grade 11', text: 'Free papers are amazing. The quizzes really test my understanding.', rating: 5 },
-    { name: 'Selma T.', grade: 'Grade 10', text: 'Best math prep app in Namibia. My marks improved from C to B+!', rating: 5 },
-  ];
+
 
   return (
     <View style={styles.container}>
@@ -321,31 +317,7 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Testimonials */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Student Success Stories</Text>
-          <Text style={styles.sectionSubtitle}>Hear from students who improved their grades</Text>
 
-          {testimonials.map((t, i) => (
-            <View key={i} style={styles.testimonialCard}>
-              <View style={styles.testimonialHeader}>
-                <View style={styles.testimonialAvatar}>
-                  <Text style={styles.avatarText}>{t.name.charAt(0)}</Text>
-                </View>
-                <View>
-                  <Text style={styles.testimonialName}>{t.name}</Text>
-                  <Text style={styles.testimonialGrade}>{t.grade}</Text>
-                </View>
-                <View style={styles.ratingRow}>
-                  {[...Array(t.rating)].map((_, j) => (
-                    <Ionicons key={j} name="star" size={14} color={COLORS.gold} />
-                  ))}
-                </View>
-              </View>
-              <Text style={styles.testimonialText}>"{t.text}"</Text>
-            </View>
-          ))}
-        </View>
 
         {/* CTA Section */}
         <View style={styles.ctaSection}>
@@ -773,53 +745,7 @@ const styles = StyleSheet.create({
     ...FONTS.bodyBold,
     color: COLORS.white,
   },
-  // Testimonials
-  testimonialCard: {
-    backgroundColor: COLORS.white,
-    borderRadius: RADIUS.lg,
-    padding: SPACING.lg,
-    marginBottom: SPACING.md,
-    ...SHADOWS.sm,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  testimonialHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: SPACING.md,
-  },
-  testimonialAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: COLORS.primary + '15',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: SPACING.md,
-  },
-  avatarText: {
-    ...FONTS.bodyBold,
-    color: COLORS.primary,
-  },
-  testimonialName: {
-    ...FONTS.bodyBold,
-    color: COLORS.textPrimary,
-  },
-  testimonialGrade: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-  },
-  ratingRow: {
-    flexDirection: 'row',
-    marginLeft: 'auto',
-    gap: 2,
-  },
-  testimonialText: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    fontStyle: 'italic',
-    lineHeight: 22,
-  },
+
   // CTA
   ctaSection: {
     marginHorizontal: SPACING.xl,

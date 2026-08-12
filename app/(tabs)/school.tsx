@@ -181,6 +181,23 @@ export default function SchoolHubScreen() {
           {/* TIMETABLES TAB */}
           {activeTab === 'timetables' && (
             <View style={styles.tabSection}>
+              
+              {/* Official Timetable Image Gallery */}
+              <View style={styles.officialTimetableSection}>
+                <Text style={styles.sectionHeaderTitle}>Official NSSCO 2026 Timetable</Text>
+                <Text style={[styles.sectionHeaderSub, { marginBottom: SPACING.md }]}>Swipe to view the full Ministry schedule.</Text>
+                
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.md }}>
+                  <Image source={require('@/assets/images/timetable-1.png')} style={styles.timetableImage} resizeMode="cover" />
+                  <Image source={require('@/assets/images/timetable-2.png')} style={styles.timetableImage} resizeMode="cover" />
+                  <Image source={require('@/assets/images/timetable-3.png')} style={styles.timetableImage} resizeMode="cover" />
+                  <Image source={require('@/assets/images/timetable-4.png')} style={styles.timetableImage} resizeMode="cover" />
+                </ScrollView>
+              </View>
+
+              <View style={styles.divider} />
+              
+              <Text style={[styles.sectionHeaderTitle, { marginBottom: SPACING.md }]}>Upcoming Exam Schedule</Text>
               {timetables.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Ionicons name="calendar-outline" size={48} color={COLORS.textMuted} />
@@ -426,5 +443,30 @@ const styles = StyleSheet.create({
   examDetailText: {
     ...FONTS.small,
     color: COLORS.textMuted,
+  },
+  officialTimetableSection: {
+    marginBottom: SPACING.lg,
+  },
+  sectionHeaderTitle: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+  },
+  sectionHeaderSub: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+  timetableImage: {
+    width: 280,
+    height: 400,
+    borderRadius: RADIUS.md,
+    backgroundColor: COLORS.borderLight,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: SPACING.md,
   },
 });
