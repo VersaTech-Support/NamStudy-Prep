@@ -39,6 +39,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
   const [error, setError] = useState('');
 
   const [schools, setSchools] = useState<{ id: string; name: string; logo_url?: string }[]>([]);
+  const [schoolSearch, setSchoolSearch] = useState('');
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [customSchoolName, setCustomSchoolName] = useState('');
 
@@ -143,6 +144,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
     setRole('student');
     setSchoolId(null);
     setCustomSchoolName('');
+    setSchoolSearch('');
   };
 
   const handleClose = () => {
@@ -157,7 +159,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={styles.container}>
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             {/* Close */}
             <TouchableOpacity style={styles.closeBtn} onPress={handleClose}>
               <Ionicons name="close" size={24} color={COLORS.textSecondary} />
@@ -358,8 +360,24 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
                   <View style={styles.inputGroup}>
                     <Text style={styles.label}>Select Your School</Text>
                     <View style={{ gap: SPACING.xs }}>
-                      <ScrollView style={{ maxHeight: 120, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceAlt }}>
-                        {schools.map((school) => (
+                      {/* Search Input */}
+                      <View style={[styles.inputContainer, { marginBottom: SPACING.xs, backgroundColor: COLORS.surfaceAlt }]}>
+                        <Ionicons name="search-outline" size={18} color={COLORS.textMuted} />
+                        <TextInput
+                          style={[styles.input, { color: COLORS.textPrimary }]}
+                          placeholder="Search schools..."
+                          placeholderTextColor={COLORS.textMuted}
+                          value={schoolSearch}
+                          onChangeText={setSchoolSearch}
+                        />
+                      </View>
+
+                      <ScrollView 
+                        style={{ maxHeight: 120, borderWidth: 1, borderColor: COLORS.border, borderRadius: RADIUS.md, backgroundColor: COLORS.surfaceAlt }}
+                        nestedScrollEnabled={true}
+                        keyboardShouldPersistTaps="handled"
+                      >
+                        {schools.filter(s => s.name.toLowerCase().includes(schoolSearch.toLowerCase())).map((school) => (
                           <TouchableOpacity
                             key={school.id}
                             style={{ padding: SPACING.md, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight, backgroundColor: schoolId === school.id ? COLORS.primary + '15' : 'transparent', flexDirection: 'row', alignItems: 'center', gap: SPACING.sm }}

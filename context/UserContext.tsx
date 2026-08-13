@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { Platform } from 'react-native';
+import { Platform, View, ActivityIndicator } from 'react-native';
 import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { supabase } from '@/lib/supabase';
 
@@ -32,7 +32,7 @@ export interface Bookmark {
 
 interface UserContextType {
   user: UserProfile | null;
-  isVIP: boolean;
+  isPro: boolean | undefined;
   isAdmin: boolean;
   loading: boolean;
   bookmarks: Bookmark[];
@@ -320,32 +320,36 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       if (updatedData.avatar_file) {
         const fileExt = updatedData.avatar_file.name.split('.').pop() || 'jpg';
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const filePath = `${user.id}/avatar.${fileExt}`;
+        const contentType = updatedData.avatar_file.type || `image/${fileExt === 'png' ? 'png' : 'jpeg'}`;
 
-        const formData = new FormData();
-        formData.append('file', {
-          uri: updatedData.avatar_file.uri,
-          name: fileName,
-          type: updatedData.avatar_file.type,
-        } as any);
+        try {
+          // Convert local file URI to binary data for Supabase Storage
+          const response = await fetch(updatedData.avatar_file.uri);
+          const arrayBuffer = await response.arrayBuffer();
 
-        const { error: uploadError } = await supabase.storage
-          .from('avatars')
-          .upload(filePath, formData, {
-            upsert: true,
-          });
+          const { error: uploadError } = await supabase.storage
+            .from('avatars')
+            .upload(filePath, arrayBuffer, {
+              upsert: true,
+              contentType,
+            });
 
-        if (uploadError) {
-          console.error('Avatar upload error:', uploadError.message);
+          if (uploadError) {
+            console.error('Avatar upload error:', uploadError.message);
+            return false;
+          }
+
+          const { data: publicURLData } = supabase.storage
+            .from('avatars')
+            .getPublicUrl(filePath);
+
+          // Append cache-busting timestamp so the UI reflects the new avatar immediately
+          avatarUrl = `${publicURLData.publicUrl}?t=${Date.now()}`;
+        } catch (uploadErr) {
+          console.error('Avatar binary conversion/upload exception:', uploadErr);
           return false;
         }
-
-        const { data: publicURLData } = supabase.storage
-          .from('avatars')
-          .getPublicUrl(filePath);
-
-        avatarUrl = publicURLData.publicUrl;
       }
 
       const payload: any = {};
@@ -570,12 +574,41 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const hasRevenueCatVIP = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
-  const isVIP = user?.subscription_status === 'VIP' || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false) || hasRevenueCatVIP;
+  const hasRevenueCatEntitlement = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
+  const isRevenueCatPlatform = Platform.OS !== 'web';
+
+  let isPro: boolean | undefined = undefined;
+  if (loading) {
+    isPro = undefined;
+  } else if (isRevenueCatPlatform) {
+    // Native: RevenueCat is the sole subscription authority.
+    if (customerInfo === null) {
+      // RevenueCat still initializing — do NOT fall back to stale Supabase data.
+      isPro = undefined;
+    } else {
+      // RevenueCat has resolved — use its entitlement as the single source of truth.
+      // Stale Supabase subscription_status cannot override this.
+      isPro = hasRevenueCatEntitlement;
+    }
+  } else {
+    // Web (or any platform where RevenueCat is unavailable by design) — Supabase fallback.
+    isPro = user?.subscription_status === 'VIP'
+         || user?.subscription_status === 'Pro'
+         || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
+  }
+  
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#F8FAFC' }}>
+        <ActivityIndicator size="large" color="#0EA5E9" />
+      </View>
+    );
+  }
+
   return (
-    <UserContext.Provider value={{ user, isVIP, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
+    <UserContext.Provider value={{ user, isPro, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
       {children}
     </UserContext.Provider>
   );

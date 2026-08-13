@@ -26,7 +26,7 @@ interface TopicSummary {
 }
 
 export default function QuizzesScreen() {
-  const { user, isVIP, toggleBookmark, isBookmarked } = useUser();
+  const { user, isPro, toggleBookmark, isBookmarked } = useUser();
   const router = useRouter();
   const [topics, setTopics] = useState<TopicSummary[]>([]);
   const [loading, setLoading] = useState(true);
@@ -113,12 +113,12 @@ export default function QuizzesScreen() {
     const key = `${topic.topicName}-${topic.gradeLevel}-${topic.subject}`;
     const attemptsLeft = freeAttempts[key] ?? 3;
 
-    if (!isVIP && attemptsLeft <= 0) {
+    if (!isPro && attemptsLeft <= 0) {
       setUpgradeVisible(true);
       return;
     }
 
-    if (!isVIP) {
+    if (!isPro) {
       setFreeAttempts(prev => ({
         ...prev,
         [key]: (prev[key] ?? 3) - 1,
@@ -195,7 +195,7 @@ export default function QuizzesScreen() {
           ))}
         </View>
 
-        {!isVIP && (
+        {!isPro && (
           <View style={styles.infoBanner}>
             <Ionicons name="information-circle" size={20} color={COLORS.accent} />
             <View style={styles.infoBannerContent}>
@@ -211,7 +211,7 @@ export default function QuizzesScreen() {
           </View>
         )}
 
-        {isVIP && (
+        {isPro === true && (
           <View style={styles.vipBanner}>
             <Ionicons name="diamond" size={20} color={COLORS.gold} />
             <Text style={styles.vipBannerText}>VIP Active - Unlimited Quizzes</Text>
@@ -249,7 +249,7 @@ export default function QuizzesScreen() {
                   topicName={topic.topicName}
                   questionCount={topic.questionCount}
                   gradeLevel={topic.gradeLevel}
-                  isVIP={isVIP}
+                  isPro={isPro}
                   freeAttemptsLeft={freeAttempts[key] ?? 3}
                   isBookmarked={isBookmarked(key)}
                   onPress={() => handleTopicPress(topic)}

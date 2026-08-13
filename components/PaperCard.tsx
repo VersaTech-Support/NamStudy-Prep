@@ -22,14 +22,14 @@ interface Paper {
 
 interface PaperCardProps {
   paper: Paper;
-  isVIP: boolean;
+  isPro: boolean | undefined;
   isBookmarked?: boolean;
   onDownloadPaper: (paper: Paper) => void;
   onViewSolution: (paper: Paper) => void;
   onToggleBookmark?: (paper: Paper) => void;
 }
 
-export default function PaperCard({ paper, isVIP, isBookmarked, onDownloadPaper, onViewSolution, onToggleBookmark }: PaperCardProps) {
+export default function PaperCard({ paper, isPro, isBookmarked, onDownloadPaper, onViewSolution, onToggleBookmark }: PaperCardProps) {
   const yearColor = paper.year >= 2023 ? COLORS.primary : COLORS.accent;
   const isCambridge = paper.grade_level === 'IGCSE' || paper.grade_level === 'AS Level';
 
@@ -96,18 +96,18 @@ export default function PaperCard({ paper, isVIP, isBookmarked, onDownloadPaper,
 
         {/* View Solution - Premium */}
         <TouchableOpacity
-          style={[styles.solutionBtn, isVIP && styles.solutionBtnUnlocked]}
+          style={[styles.solutionBtn, isPro === true && styles.solutionBtnUnlocked]}
           onPress={() => onViewSolution(paper)}
           activeOpacity={0.7}
         >
-          {!isVIP && (
+          {!isPro && (
             <Ionicons name="lock-closed" size={14} color={COLORS.goldDark} />
           )}
-          {isVIP && (
+          {isPro === true && (
             <Ionicons name="key" size={14} color={COLORS.white} />
           )}
-          <Text style={[styles.solutionBtnText, isVIP && styles.solutionBtnTextUnlocked]}>
-            {isVIP ? 'View Solution' : 'Solution'}
+          <Text style={[styles.solutionBtnText, isPro === true && styles.solutionBtnTextUnlocked]}>
+            {isPro === true ? 'View Solution' : 'Solution'}
           </Text>
         </TouchableOpacity>
       </View>

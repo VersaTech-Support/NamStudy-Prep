@@ -41,7 +41,7 @@ const BANK_DETAILS = {
 };
 
 export default function PaymentScreen() {
-  const { user, isVIP, customerInfo, manageSubscriptions, refreshSubscription } = useUser();
+  const { user, isPro, customerInfo, manageSubscriptions, refreshSubscription } = useUser();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -272,7 +272,15 @@ export default function PaymentScreen() {
     );
   }
 
-  if (isVIP) {
+  if (isPro === undefined) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (isPro === true) {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
@@ -287,7 +295,7 @@ export default function PaymentScreen() {
             <View style={styles.vipActiveIcon}>
               <Ionicons name="diamond" size={40} color={COLORS.gold} />
             </View>
-            <Text style={styles.vipActiveTitle}>You're Already VIP!</Text>
+            <Text style={styles.vipActiveTitle}>You're Already Pro!</Text>
             <Text style={styles.vipActiveText}>
               You have full access to all step-by-step solutions and unlimited quizzes.
             </Text>

@@ -32,7 +32,7 @@ interface QuizQuestion {
 export default function QuizScreen() {
   const { topic, gradeLevel } = useLocalSearchParams<{ topic: string; gradeLevel: string }>();
   const router = useRouter();
-  const { user, isVIP } = useUser();
+  const { user, isPro } = useUser();
 
   const [questions, setQuestions] = useState<QuizQuestion[]>([]);
   const [loading, setLoading] = useState(true);

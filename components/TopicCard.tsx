@@ -26,14 +26,14 @@ interface TopicCardProps {
   topicName: string;
   questionCount: number;
   gradeLevel: string;
-  isVIP: boolean;
+  isPro: boolean | undefined;
   freeAttemptsLeft?: number;
   isBookmarked?: boolean;
   onPress: () => void;
   onToggleBookmark?: () => void;
 }
 
-export default function TopicCard({ topicName, questionCount, gradeLevel, isVIP, freeAttemptsLeft = 3, isBookmarked, onPress, onToggleBookmark }: TopicCardProps) {
+export default function TopicCard({ topicName, questionCount, gradeLevel, isPro, freeAttemptsLeft = 3, isBookmarked, onPress, onToggleBookmark }: TopicCardProps) {
   const topicStyle = TOPIC_ICONS[topicName] || { icon: 'help-circle', color: COLORS.primary, bg: COLORS.primaryLight + '30' };
 
   return (
@@ -57,12 +57,12 @@ export default function TopicCard({ topicName, questionCount, gradeLevel, isVIP,
               />
             </TouchableOpacity>
           )}
-          {!isVIP && (
+          {!isPro && (
             <View style={styles.freeBadge}>
               <Text style={styles.freeBadgeText}>{freeAttemptsLeft} free</Text>
             </View>
           )}
-          {isVIP && (
+          {isPro === true && (
             <View style={styles.vipBadge}>
               <Ionicons name="infinite" size={14} color={COLORS.gold} />
             </View>

@@ -31,7 +31,7 @@ interface Payment {
 }
 
 export default function ProfileScreen() {
-  const { user, isVIP, isAdmin, onlineUsersCount, logout, refreshUser, updateProfile } = useUser();
+  const { user, isPro, isAdmin, onlineUsersCount, logout, refreshUser, updateProfile } = useUser();
   const router = useRouter();
   const showAdminDashboard = isAdmin || user?.is_school_admin;
   const [authVisible, setAuthVisible] = useState(false);
@@ -141,7 +141,7 @@ export default function ProfileScreen() {
             <View style={[styles.cameraOverlay, showAdminDashboard && { backgroundColor: '#8A9EA7', borderColor: '#fdfdfd' }]}>
               <Ionicons name="camera" size={12} color={COLORS.white} />
             </View>
-            {isVIP && !showAdminDashboard && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
+            {isPro === true && !showAdminDashboard && <View style={styles.vipBadgeSmall}><Ionicons name="diamond" size={12} color={COLORS.white} /></View>}
             {showAdminDashboard && <View style={[styles.vipBadgeSmall, { backgroundColor: '#A0B2C6' }]}><Ionicons name="shield" size={12} color={COLORS.white} /></View>}
           </TouchableOpacity>
           <Text style={styles.profileName}>{user.name}</Text>
@@ -169,9 +169,9 @@ export default function ProfileScreen() {
             )}
             
             {!showAdminDashboard && (
-              <View style={[styles.profileTag, { backgroundColor: isVIP ? COLORS.goldLight : COLORS.surfaceAlt }]}>
-                <Ionicons name={isVIP ? 'diamond' : 'person'} size={12} color={isVIP ? COLORS.gold : COLORS.textMuted} />
-                <Text style={[styles.profileTagText, { color: isVIP ? COLORS.goldDark : COLORS.textMuted }]}>{isVIP ? 'VIP Plan' : 'Free Plan'}</Text>
+              <View style={[styles.profileTag, { backgroundColor: isPro === true ? COLORS.goldLight : COLORS.surfaceAlt }]}>
+                <Ionicons name={isPro === true ? 'diamond' : 'person'} size={12} color={isPro === true ? COLORS.gold : COLORS.textMuted} />
+                <Text style={[styles.profileTagText, { color: isPro === true ? COLORS.goldDark : COLORS.textMuted }]}>{isPro === true ? 'Pro Plan' : 'Free Plan'}</Text>
               </View>
             )}
           </View>
@@ -196,7 +196,7 @@ export default function ProfileScreen() {
         </View>
 
         {/* Pending Payment Banner */}
-        {pendingPayment && !isVIP && (
+        {pendingPayment && !isPro && (
           <TouchableOpacity style={styles.pendingBanner} onPress={() => router.push('/payment')} activeOpacity={0.8}>
             <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: COLORS.white, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
               <Ionicons name="time" size={20} color={COLORS.gold} />
@@ -210,13 +210,13 @@ export default function ProfileScreen() {
         )}
 
         {/* Subscription */}
-        {isVIP && !showAdminDashboard ? (
+        {isPro === true && !showAdminDashboard ? (
           <View style={styles.subscriptionCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
               <View style={{ width: 44, height: 44, borderRadius: RADIUS.md, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
                 <Ionicons name="diamond" size={24} color={COLORS.gold} />
               </View>
-              <View style={{ flex: 1 }}><Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>VIP Subscription</Text><Text style={{ ...FONTS.small, color: COLORS.green }}>Active</Text></View>
+              <View style={{ flex: 1 }}><Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>Pro Subscription</Text><Text style={{ ...FONTS.small, color: COLORS.green }}>Active</Text></View>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}><View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: COLORS.green }} /><Text style={{ ...FONTS.small, color: COLORS.green, fontWeight: '700' }}>Active</Text></View>
             </View>
             {daysUntilExpiry !== null && (
@@ -238,7 +238,7 @@ export default function ProfileScreen() {
               <View style={{ width: 52, height: 52, borderRadius: RADIUS.md, backgroundColor: COLORS.goldLight, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md }}>
                 <Ionicons name="diamond" size={28} color={COLORS.gold} />
               </View>
-              <View style={{ flex: 1 }}><Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>Upgrade to VIP</Text><Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>Get solutions & unlimited quizzes</Text></View>
+              <View style={{ flex: 1 }}><Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>Upgrade to Pro</Text><Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>Get solutions & unlimited quizzes</Text></View>
             </View>
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.goldLight, padding: SPACING.md, borderRadius: RADIUS.sm }}>
               <Text style={{ ...FONTS.caption, color: COLORS.goldDark, fontWeight: '700' }}>From N$60/month via FNB Transfer</Text>

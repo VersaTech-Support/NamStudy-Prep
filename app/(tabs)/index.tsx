@@ -19,7 +19,7 @@ import { supabase } from '@/lib/supabase';
 const { width } = Dimensions.get('window');
 
 export default function HomeScreen() {
-  const { user, isVIP, isAdmin, streak } = useUser();
+  const { user, isPro, isAdmin, streak } = useUser();
   const router = useRouter();
   const [authVisible, setAuthVisible] = useState(false);
   const [paperCount, setPaperCount] = useState(0);
@@ -164,7 +164,7 @@ export default function HomeScreen() {
                     <Text style={styles.userName}>{user.name.split(' ')[0]}</Text>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                       <Text style={styles.roleTagText}>{getRoleTag()}</Text>
-                      {isVIP && <Ionicons name="diamond" size={10} color={COLORS.gold} />}
+                      {isPro === true && <Ionicons name="diamond" size={10} color={COLORS.gold} />}
                     </View>
                   </View>
                 </View>
