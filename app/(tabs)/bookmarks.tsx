@@ -123,7 +123,7 @@ export default function BookmarksScreen() {
               </View>
             ) : (
               paperBookmarks.map((bookmark) => {
-                const paper = bookmark.metadata;
+                const paper = bookmark.metadata as unknown as any; // Cast safely for local usage
                 if (!paper) return null;
                 return (
                   <PaperCard
@@ -152,7 +152,7 @@ export default function BookmarksScreen() {
             ) : (
               <View style={styles.topicsGrid}>
                 {quizBookmarks.map((bookmark) => {
-                  const topic = bookmark.metadata;
+                  const topic = bookmark.metadata as unknown as any; // Cast safely for local usage
                   if (!topic) return null;
                   return (
                     <TopicCard

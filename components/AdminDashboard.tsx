@@ -43,6 +43,57 @@ interface UserRecord {
   is_admin: boolean;
   role?: string;
   school?: string | null;
+  school_id?: string | null;
+  is_school_admin?: boolean;
+}
+
+interface Quiz {
+  id: string;
+  subject?: string | null;
+  topic_name?: string | null;
+  question?: string | null;
+  option_a?: string | null;
+  option_b?: string | null;
+  option_c?: string | null;
+  option_d?: string | null;
+  correct_answer?: string | null;
+  explanation_text?: string | null;
+  grade_level?: string | null;
+  difficulty?: string | null;
+}
+
+interface School {
+  id: string;
+  name: string;
+  code?: string | null;
+  logo_url?: string | null;
+  primary_color?: string | null;
+  accent_color?: string | null;
+}
+
+interface Notice {
+  id: string;
+  school_id?: string | null;
+  title: string;
+  content: string;
+  author_id?: string | null;
+  is_urgent?: boolean;
+  created_at: string;
+  schools?: { name: string } | null;
+}
+
+interface Timetable {
+  id: string;
+  school_id?: string | null;
+  curriculum?: string | null;
+  subject_name?: string | null;
+  paper_code?: string | null;
+  exam_date?: string | null;
+  start_time?: string | null;
+  duration?: string | null;
+  venue?: string | null;
+  created_at: string;
+  schools?: { name: string } | null;
 }
 
 interface PaymentRecord {
@@ -62,6 +113,7 @@ interface PaymentRecord {
 
 export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?: number }) {
   const { user, isAdmin, uploadSchoolLogo } = useUser();
+  const router = useRouter();
 
   const [activeTab, setActiveTab] = useState<'payments' | 'papers' | 'users' | 'quizzes' | 'schools' | 'notices' | 'timetables'>(isAdmin ? 'payments' : 'notices');
   const [filterRole, setFilterRole] = useState<'All' | 'student' | 'teacher' | 'admin'>('All');
@@ -69,11 +121,14 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [papers, setPapers] = useState<Paper[]>([]);
   const [users, setUsers] = useState<UserRecord[]>([]);
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [quizCount, setQuizCount] = useState(0);
-  const [schoolsList, setSchoolsList] = useState<any[]>([]);
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]); // PHASE 5: Fetch full quizzes
+  const [schoolsList, setSchoolsList] = useState<School[]>([]);
   const [pendingSchoolRequests, setPendingSchoolRequests] = useState<{ school: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // School directory search
+  const [schoolSearchQuery, setSchoolSearchQuery] = useState('');
 
   // School form states
   const [showSchoolForm, setShowSchoolForm] = useState(false);
@@ -96,6 +151,8 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [uploadingPaper, setUploadingPaper] = useState(false);
   const [uploadingSolution, setUploadingSolution] = useState(false);
   const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
+  const [paperSearchQuery, setPaperSearchQuery] = useState('');
+  const [paperGradeFilter, setPaperGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level'>('All');
 
   // Quiz form states
   const [showQuizForm, setShowQuizForm] = useState(false);
@@ -110,6 +167,9 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [quizExplanation, setQuizExplanation] = useState('');
   const [quizGrade, setQuizGrade] = useState<'NSSCO' | 'NSSCAS'>('NSSCO');
   const [quizDifficulty, setQuizDifficulty] = useState<'Easy' | 'Medium' | 'Hard'>('Medium');
+  const [editingQuizId, setEditingQuizId] = useState<string | null>(null);
+  const [quizSearchQuery, setQuizSearchQuery] = useState('');
+  const [quizGradeFilter, setQuizGradeFilter] = useState<'All' | 'NSSCO' | 'NSSCAS'>('All');
 
   // NEW: Dynamic Subjects States
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
@@ -126,8 +186,10 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [noticeTitle, setNoticeTitle] = useState('');
   const [noticeContent, setNoticeContent] = useState('');
   const [noticeIsUrgent, setNoticeIsUrgent] = useState(false);
-  const [noticeSchoolId, setNoticeSchoolId] = useState<string | null>(null);
-  const [noticesList, setNoticesList] = useState<any[]>([]);
+  const [noticesList, setNoticesList] = useState<Notice[]>([]);
+  const [editingNoticeId, setEditingNoticeId] = useState<string | null>(null);
+  const [noticeSearchQuery, setNoticeSearchQuery] = useState('');
+  const [noticeScopeFilter, setNoticeScopeFilter] = useState<'All' | 'National' | 'School'>('All');
 
   // Timetable form states
   const [showTimetableForm, setShowTimetableForm] = useState(false);
@@ -138,8 +200,19 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
   const [timetableTime, setTimetableTime] = useState('08:00 AM');
   const [timetableDuration, setTimetableDuration] = useState('2 hours');
   const [timetableVenue, setTimetableVenue] = useState('Main Hall');
-  const [timetableSchoolId, setTimetableSchoolId] = useState<string | null>(null);
-  const [timetablesList, setTimetablesList] = useState<any[]>([]);
+  const [timetablesList, setTimetablesList] = useState<Timetable[]>([]);
+  const [editingTimetableId, setEditingTimetableId] = useState<string | null>(null);
+  const [timetableSearchQuery, setTimetableSearchQuery] = useState('');
+  const [timetableScopeFilter, setTimetableScopeFilter] = useState<'All' | 'National' | 'School'>('All');
+
+  // User Management Form states
+  const [showManageSchoolForm, setShowManageSchoolForm] = useState(false);
+  const [manageSchoolUserId, setManageSchoolUserId] = useState<string | null>(null);
+  const [manageSchoolId, setManageSchoolId] = useState<string | null>(null);
+  const [manageSchoolAdmin, setManageSchoolAdmin] = useState(false);
+  const [manageSchoolUserName, setManageSchoolUserName] = useState('');
+  const [manageSchoolUserRole, setManageSchoolUserRole] = useState('');
+  const [manageSchoolUserEmail, setManageSchoolUserEmail] = useState('');
 
   useEffect(() => {
     fetchData();
@@ -150,7 +223,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     const [papersRes, usersRes, quizzesRes, paymentsRes, subjectsRes, schoolsRes, noticesRes, timetablesRes] = await Promise.all([
       supabase.from('papers').select('*').order('year', { ascending: false }),
       supabase.from('users').select('*').order('created_at', { ascending: false }),
-      supabase.from('quizzes').select('*', { count: 'exact', head: true }),
+      supabase.from('quizzes').select('*').order('created_at', { ascending: false }),
       supabase.from('payments').select('*, users(name, email, grade_level)').order('created_at', { ascending: false }),
       supabase.from('subjects').select('name').order('name'),
       supabase.from('schools').select('*').order('name'),
@@ -160,8 +233,8 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
 
     if (papersRes.data) setPapers(papersRes.data);
     if (usersRes.data) setUsers(usersRes.data);
-    if (quizzesRes.count !== null) setQuizCount(quizzesRes.count);
-    if (paymentsRes.data) setPayments(paymentsRes.data as any);
+    if (quizzesRes.data) setQuizzes(quizzesRes.data);
+    if (paymentsRes.data) setPayments(paymentsRes.data as PaymentRecord[]);
     if (subjectsRes.data) setAvailableSubjects(subjectsRes.data.map((s: { name: string }) => s.name));
     if (schoolsRes.data) setSchoolsList(schoolsRes.data);
     if (noticesRes.data) setNoticesList(noticesRes.data);
@@ -170,7 +243,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     // Compute pending school requests from the fetched users
     if (usersRes.data) {
       const counts: Record<string, number> = {};
-      usersRes.data.forEach((u: any) => {
+      usersRes.data.forEach((u: UserRecord) => {
         if (u.school && !u.school_id) {
           counts[u.school] = (counts[u.school] || 0) + 1;
         }
@@ -215,6 +288,24 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     }
   };
 
+  const handleManageSchool = async () => {
+    if (!manageSchoolUserId) return;
+    setSaving(true);
+    const { error } = await supabase.rpc('set_school_admin_assignment', {
+      target_user_id: manageSchoolUserId,
+      target_school_id: manageSchoolId,
+      new_is_school_admin: manageSchoolAdmin,
+    });
+    setSaving(false);
+
+    if (error) {
+      Alert.alert('Error', error.message);
+    } else {
+      setShowManageSchoolForm(false);
+      fetchData();
+    }
+  };
+
   const handleLogoUpload = async (schoolId: string, currentSchoolName: string) => {
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -255,42 +346,63 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     }
   };
 
-  // NEW: handleAddNotice function
-  const handleAddNotice = async () => {
+  const handleSaveNotice = async () => {
     if (!noticeTitle.trim() || !noticeContent.trim()) {
       Alert.alert('Error', 'Title and content are required.');
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('school_announcements').insert({
+    const targetSchoolId = isAdmin ? null : user?.school_id || null;
+    const noticeData = {
       title: noticeTitle.trim(),
       content: noticeContent.trim(),
       is_urgent: noticeIsUrgent,
-      school_id: noticeSchoolId || null,
+      school_id: targetSchoolId,
       author_id: user?.id || null,
-    });
-    setSaving(false);
+    };
     
-    if (error) {
-      Alert.alert('Error', 'Failed to add notice: ' + error.message);
+    if (editingNoticeId) {
+      const { error } = await supabase.from('school_announcements').update(noticeData).eq('id', editingNoticeId);
+      if (error) Alert.alert('Error', 'Failed to update notice: ' + error.message);
+      else Alert.alert('Success', 'Notice updated!');
     } else {
-      setShowNoticeForm(false);
-      setNoticeTitle('');
-      setNoticeContent('');
-      setNoticeIsUrgent(false);
-      setNoticeSchoolId(null);
-      fetchData();
+      const { error } = await supabase.from('school_announcements').insert(noticeData);
+      if (error) Alert.alert('Error', 'Failed to add notice: ' + error.message);
+      else Alert.alert('Success', 'Notice added!');
     }
+    
+    setSaving(false);
+    setShowNoticeForm(false);
+    setNoticeTitle('');
+    setNoticeContent('');
+    setNoticeIsUrgent(false);
+    setEditingNoticeId(null);
+    fetchData();
   };
 
-  // NEW: handleAddTimetable function
-  const handleAddTimetable = async () => {
+  const handleEditNotice = (notice: Notice) => {
+    setEditingNoticeId(notice.id);
+    setNoticeTitle(notice.title);
+    setNoticeContent(notice.content);
+    setNoticeIsUrgent(notice.is_urgent || false);
+    setShowNoticeForm(true);
+  };
+
+  const handleDeleteNotice = (noticeId: string) => {
+    Alert.alert('Delete Notice', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { await supabase.from('school_announcements').delete().eq('id', noticeId); fetchData(); } },
+    ]);
+  };
+
+  const handleSaveTimetable = async () => {
     if (!timetableSubject.trim()) {
       Alert.alert('Error', 'Subject name is required.');
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('school_timetables').insert({
+    const targetSchoolId = isAdmin ? null : user?.school_id || null;
+    const timetableData = {
       curriculum: timetableCurriculum,
       subject_name: timetableSubject.trim(),
       paper_code: timetablePaper.trim(),
@@ -298,19 +410,44 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
       start_time: timetableTime.trim(),
       duration: timetableDuration.trim(),
       venue: timetableVenue.trim(),
-      school_id: timetableSchoolId || null,
-    });
+      school_id: targetSchoolId,
+    };
     
-    if (error) {
-      Alert.alert('Error', 'Failed to add timetable: ' + error.message);
+    if (editingTimetableId) {
+      const { error } = await supabase.from('school_timetables').update(timetableData).eq('id', editingTimetableId);
+      if (error) Alert.alert('Error', 'Failed to update timetable: ' + error.message);
+      else Alert.alert('Success', 'Timetable updated!');
     } else {
-      setShowTimetableForm(false);
-      setTimetableSubject('');
-      setTimetablePaper('');
-      setTimetableSchoolId(null);
-      fetchData();
+      const { error } = await supabase.from('school_timetables').insert(timetableData);
+      if (error) Alert.alert('Error', 'Failed to add timetable: ' + error.message);
+      else Alert.alert('Success', 'Timetable added!');
     }
+    
+    setShowTimetableForm(false);
+    setTimetableSubject('');
+    setTimetablePaper('');
+    setEditingTimetableId(null);
+    fetchData();
     setSaving(false);
+  };
+
+  const handleEditTimetable = (item: Timetable) => {
+    setEditingTimetableId(item.id);
+    setTimetableCurriculum(item.curriculum || 'NSSCO');
+    setTimetableSubject(item.subject_name || '');
+    setTimetablePaper(item.paper_code || '');
+    setTimetableDate(item.exam_date || new Date().toISOString().split('T')[0]);
+    setTimetableTime(item.start_time || '');
+    setTimetableDuration(item.duration || '');
+    setTimetableVenue(item.venue || '');
+    setShowTimetableForm(true);
+  };
+
+  const handleDeleteTimetable = (timetableId: string) => {
+    Alert.alert('Delete Event', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { await supabase.from('school_timetables').delete().eq('id', timetableId); fetchData(); } },
+    ]);
   };
 
   // NEW: handleAddSubject function
@@ -368,8 +505,9 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
         setSolutionUrl(data.publicUrl);
         Alert.alert('Success', 'Solution PDF uploaded successfully!');
       }
-    } catch (error: any) {
-      Alert.alert('Upload Error', error.message || 'Failed to upload document.');
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Failed to upload document.';
+      Alert.alert('Upload Error', msg);
     } finally {
       setUploadingPaper(false);
       setUploadingSolution(false);
@@ -497,8 +635,8 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
       return;
     }
     setSaving(true);
-    const { error } = await supabase.from('quizzes').insert({
-      subject: quizSubject, // NEW: Include subject in DB payload
+    const quizData = {
+      subject: quizSubject,
       topic_name: quizTopic, 
       question: quizQuestion,
       option_a: quizA, 
@@ -509,12 +647,54 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
       explanation_text: quizExplanation,
       grade_level: quizGrade, 
       difficulty: quizDifficulty,
-    });
-    if (error) Alert.alert('Error', 'Failed to add quiz question.');
-    else Alert.alert('Success', 'Quiz question added!');
+    };
+    
+    if (editingQuizId) {
+      const { error } = await supabase.from('quizzes').update(quizData).eq('id', editingQuizId);
+      if (error) Alert.alert('Error', 'Failed to update quiz question.');
+      else Alert.alert('Success', 'Quiz question updated!');
+    } else {
+      const { error } = await supabase.from('quizzes').insert(quizData);
+      if (error) Alert.alert('Error', 'Failed to add quiz question.');
+      else Alert.alert('Success', 'Quiz question added!');
+    }
+    
     setSaving(false);
     setShowQuizForm(false);
+    
+    // Reset form
+    setQuizTopic('');
+    setQuizQuestion('');
+    setQuizA('');
+    setQuizB('');
+    setQuizC('');
+    setQuizD('');
+    setQuizExplanation('');
+    setEditingQuizId(null);
     fetchData();
+  };
+
+  const handleEditQuiz = (quiz: Quiz) => {
+    setEditingQuizId(quiz.id);
+    setQuizSubject(quiz.subject || 'Mathematics');
+    setQuizTopic(quiz.topic_name || '');
+    setQuizQuestion(quiz.question || '');
+    setQuizA(quiz.option_a || '');
+    setQuizB(quiz.option_b || '');
+    setQuizC(quiz.option_c || '');
+    setQuizD(quiz.option_d || '');
+    setQuizCorrect((quiz.correct_answer as any) || 'A');
+    setQuizExplanation(quiz.explanation_text || '');
+    setQuizGrade((quiz.grade_level as any) || 'NSSCO');
+    setQuizDifficulty((quiz.difficulty as any) || 'Medium');
+    setShowQuizForm(true);
+  };
+
+  const handleDeleteQuiz = (quizId: string) => {
+    Alert.alert('Delete Quiz', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: async () => { await supabase.from('quizzes').delete().eq('id', quizId); fetchData(); } },
+    ]);
   };
 
   const handleEditPaper = (paper: Paper) => {
@@ -592,6 +772,26 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
             <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.green }}>{papers.length}</Text>
             <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Papers</Text>
           </View>
+          
+          <View style={{ flexBasis: '31%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.gold }}>{quizzes.length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Quiz Questions</Text>
+          </View>
+
+          <View style={{ flexBasis: '31%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.primary }}>{schoolsList.length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Registered Schools</Text>
+          </View>
+
+          <View style={{ flexBasis: '48%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.gold }}>{pendingPayments.length}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Pending Payments</Text>
+          </View>
+
+          <View style={{ flexBasis: '48%', backgroundColor: COLORS.surfaceAlt, padding: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.borderLight }}>
+            <Text style={{ fontSize: 16, fontWeight: '800', color: COLORS.green }}>N${totalRevenue.toFixed(2)}</Text>
+            <Text style={{ fontSize: 11, color: COLORS.textMuted }}>Approved Payments Revenue</Text>
+          </View>
         </View>
       </View>
 
@@ -607,7 +807,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
               onPress={() => setActiveTab(tab)}
             >
               <View style={styles.tabInner}>
-                <Ionicons name={icons[tab] as any} size={16} color={activeTab === tab ? COLORS.primary : COLORS.textMuted} />
+                <Ionicons name={icons[tab] as keyof typeof Ionicons.glyphMap} size={16} color={activeTab === tab ? COLORS.primary : COLORS.textMuted} />
                 <Text style={[styles.tabText, activeTab === tab && styles.tabTextActive]}>
                   {tab.charAt(0).toUpperCase() + tab.slice(1)}
                 </Text>
@@ -717,7 +917,13 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
           )}
 
           {/* PAPERS TAB */}
-          {activeTab === 'papers' && (
+          {activeTab === 'papers' && (() => {
+            const filteredPapers = papers.filter(p => {
+              const matchesSearch = p.title.toLowerCase().includes(paperSearchQuery.toLowerCase()) || (p.subject && p.subject.toLowerCase().includes(paperSearchQuery.toLowerCase()));
+              const matchesGrade = paperGradeFilter === 'All' || p.grade_level === paperGradeFilter;
+              return matchesSearch && matchesGrade;
+            });
+            return (
             <View style={styles.tabContent}>
               <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: SPACING.md }}>
                 <TouchableOpacity style={[styles.addBtn, { flex: 1, marginRight: SPACING.sm }]} onPress={() => { setEditingPaperId(null); setShowPaperForm(true); }}>
@@ -729,8 +935,40 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                   <Text style={styles.addBtnText}>New Subject</Text>
                 </TouchableOpacity>
               </View>
-              <Text style={styles.infoText}>Manage past papers and VIP solutions.</Text>
-              {papers.map(paper => (
+
+              {/* Papers Search & Filter */}
+              <View style={{ marginBottom: SPACING.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.borderLight, ...SHADOWS.sm, marginBottom: SPACING.sm }}>
+                  <Ionicons name="search" size={18} color={COLORS.textMuted} />
+                  <TextInput
+                    style={{ flex: 1, ...FONTS.body, color: COLORS.textPrimary, marginLeft: SPACING.sm }}
+                    placeholder="Search papers by title or subject..."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={paperSearchQuery}
+                    onChangeText={setPaperSearchQuery}
+                  />
+                  {paperSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setPaperSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                  {(['All', 'NSSCO', 'NSSCAS', 'IGCSE', 'AS Level'] as const).map(grade => (
+                    <TouchableOpacity
+                      key={grade}
+                      style={[styles.filterChip, paperGradeFilter === grade && styles.filterChipActive]}
+                      onPress={() => setPaperGradeFilter(grade)}
+                    >
+                      <Text style={[styles.filterChipText, paperGradeFilter === grade && styles.filterChipTextActive]}>{grade}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{filteredPapers.length} paper(s) found.</Text>
+              
+              {filteredPapers.map(paper => (
                 <View key={paper.id} style={styles.adminCard}>
                   <View style={styles.adminCardHeader}>
                     <View style={{ flex: 1 }}>
@@ -752,7 +990,8 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 </View>
               ))}
             </View>
-          )}
+            );
+          })()}
 
           {/* USERS TAB */}
           {activeTab === 'users' && (
@@ -854,28 +1093,140 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                           </Text>
                         )}
                       </View>
+                      {isAdmin && u.role === 'teacher' && (
+                        <TouchableOpacity
+                          style={[styles.actionBtn, { backgroundColor: COLORS.primary + '15', marginLeft: SPACING.sm }]}
+                          onPress={() => {
+                            setManageSchoolUserId(u.id);
+                            setManageSchoolUserName(u.name);
+                            setManageSchoolUserEmail(u.email);
+                            setManageSchoolUserRole(u.role || '');
+                            setManageSchoolId(u.school_id || null);
+                            setManageSchoolAdmin(u.is_school_admin || false);
+                            setShowManageSchoolForm(true);
+                          }}
+                        >
+                          <Ionicons name="settings-outline" size={18} color={COLORS.primary} />
+                        </TouchableOpacity>
+                      )}
                     </View>
                   </View>
                 ))}
             </View>
           )}
 
-          {activeTab === 'quizzes' && (
+          {/* QUIZZES TAB */}
+          {activeTab === 'quizzes' && (() => {
+            const filteredQuizzes = quizzes.filter(q => {
+              const matchesSearch = (q.topic_name && q.topic_name.toLowerCase().includes(quizSearchQuery.toLowerCase())) || 
+                                    (q.subject && q.subject.toLowerCase().includes(quizSearchQuery.toLowerCase())) ||
+                                    (q.question && q.question.toLowerCase().includes(quizSearchQuery.toLowerCase()));
+              const matchesGrade = quizGradeFilter === 'All' || q.grade_level === quizGradeFilter;
+              return matchesSearch && matchesGrade;
+            });
+            return (
             <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowQuizForm(true)}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => { setEditingQuizId(null); setShowQuizForm(true); }}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Add Quiz Question</Text>
               </TouchableOpacity>
-              <Text style={styles.infoText}>Manage quiz questions from the database.</Text>
-            </View>
-          )}
+              
+              {/* Quizzes Search & Filter */}
+              <View style={{ marginBottom: SPACING.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.borderLight, ...SHADOWS.sm, marginBottom: SPACING.sm }}>
+                  <Ionicons name="search" size={18} color={COLORS.textMuted} />
+                  <TextInput
+                    style={{ flex: 1, ...FONTS.body, color: COLORS.textPrimary, marginLeft: SPACING.sm }}
+                    placeholder="Search quizzes by topic, subject or question..."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={quizSearchQuery}
+                    onChangeText={setQuizSearchQuery}
+                  />
+                  {quizSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setQuizSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                  {(['All', 'NSSCO', 'NSSCAS'] as const).map(grade => (
+                    <TouchableOpacity
+                      key={grade}
+                      style={[styles.filterChip, quizGradeFilter === grade && styles.filterChipActive]}
+                      onPress={() => setQuizGradeFilter(grade)}
+                    >
+                      <Text style={[styles.filterChipText, quizGradeFilter === grade && styles.filterChipTextActive]}>{grade}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
 
-          {activeTab === 'schools' && isAdmin && (
+              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{filteredQuizzes.length} question(s) found.</Text>
+              
+              {filteredQuizzes.map(quiz => (
+                <View key={quiz.id} style={styles.adminCard}>
+                  <View style={styles.adminCardHeader}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.adminCardTitle}>{quiz.topic_name} - {quiz.subject}</Text>
+                      <Text style={styles.adminCardSub}>
+                        {quiz.grade_level} • Difficulty: {quiz.difficulty}
+                      </Text>
+                      <Text style={[styles.adminCardSub, {marginTop: 4, color: COLORS.textPrimary}]} numberOfLines={2}>{quiz.question}</Text>
+                    </View>
+                    <View style={styles.adminCardActions}>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.accent + '15' }]} onPress={() => handleEditQuiz(quiz)}>
+                        <Ionicons name="create" size={16} color={COLORS.accent} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.redLight }]} onPress={() => handleDeleteQuiz(quiz.id)}>
+                        <Ionicons name="trash" size={16} color={COLORS.red} />
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                </View>
+              ))}
+            </View>
+            );
+          })()}
+
+          {activeTab === 'schools' && isAdmin && (() => {
+            // Single-pass aggregation of school statistics from in-memory users
+            const schoolStats = users.reduce<Record<string, { learners: number; teachers: number }>>((acc, u) => {
+              if (!u.school_id) return acc;
+              if (!acc[u.school_id]) acc[u.school_id] = { learners: 0, teachers: 0 };
+              if (u.role === 'student') acc[u.school_id].learners++;
+              else if (u.role === 'teacher') acc[u.school_id].teachers++;
+              // Users with null/undefined/admin roles are not counted as learners or teachers
+              return acc;
+            }, {});
+
+            const filteredSchools = schoolsList.filter(school =>
+              school.name.toLowerCase().includes(schoolSearchQuery.toLowerCase()) ||
+              (school.code && school.code.toLowerCase().includes(schoolSearchQuery.toLowerCase()))
+            );
+
+            return (
             <View style={styles.tabContent}>
               <TouchableOpacity style={styles.addBtn} onPress={() => setShowSchoolForm(true)}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Add New School</Text>
               </TouchableOpacity>
+
+              {/* School Search */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 10, marginBottom: SPACING.lg, borderWidth: 1, borderColor: COLORS.borderLight, ...SHADOWS.sm }}>
+                <Ionicons name="search" size={18} color={COLORS.textMuted} />
+                <TextInput
+                  style={{ flex: 1, ...FONTS.body, color: COLORS.textPrimary, marginLeft: SPACING.sm }}
+                  placeholder="Search schools by name or code..."
+                  placeholderTextColor={COLORS.textMuted}
+                  value={schoolSearchQuery}
+                  onChangeText={setSchoolSearchQuery}
+                />
+                {schoolSearchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSchoolSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                  </TouchableOpacity>
+                )}
+              </View>
 
               {/* Pending School Requests */}
               {pendingSchoolRequests.length > 0 && (
@@ -908,46 +1259,118 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                   ))}
                 </View>
               )}
-              
-              {schoolsList.map(school => (
-                <View key={school.id} style={styles.adminCard}>
-                  <View style={styles.adminCardHeader}>
-                    <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
-                      {school.logo_url ? (
-                        <Image source={{ uri: school.logo_url }} style={{ width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: COLORS.surfaceAlt }} />
-                      ) : (
-                        <View style={{ width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: school.primary_color, alignItems: 'center', justifyContent: 'center' }}>
-                          <Text style={{ ...FONTS.h3, color: COLORS.white }}>{school.name.charAt(0)}</Text>
-                        </View>
-                      )}
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.adminCardTitle}>{school.name}</Text>
-                        {school.code && (
-                          <View style={[styles.roleBadge, { alignSelf: 'flex-start', marginTop: 4 }]}>
-                            <Text style={styles.roleBadgeText}>{school.code}</Text>
+
+              {/* School Directory */}
+              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>
+                {filteredSchools.length} school{filteredSchools.length !== 1 ? 's' : ''}{schoolSearchQuery ? ' matching' : ' registered'}
+              </Text>
+              {filteredSchools.map(school => {
+                const stats = schoolStats[school.id] || { learners: 0, teachers: 0 };
+                return (
+                  <TouchableOpacity
+                    key={school.id}
+                    style={styles.adminCard}
+                    activeOpacity={0.7}
+                    onPress={() => router.push(`/school-details/${school.id}` as import('expo-router').Href)}
+                  >
+                    <View style={styles.adminCardHeader}>
+                      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
+                        {school.logo_url ? (
+                          <Image source={{ uri: school.logo_url }} style={{ width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: COLORS.surfaceAlt }} />
+                        ) : (
+                          <View style={{ width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: school.primary_color || COLORS.primary, alignItems: 'center', justifyContent: 'center' }}>
+                            <Text style={{ ...FONTS.h3, color: COLORS.white }}>{school.name.charAt(0)}</Text>
                           </View>
                         )}
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.adminCardTitle}>{school.name}</Text>
+                          {school.code && (
+                            <View style={[styles.roleBadge, { alignSelf: 'flex-start', marginTop: 4 }]}>
+                              <Text style={styles.roleBadgeText}>{school.code}</Text>
+                            </View>
+                          )}
+                        </View>
                       </View>
-                    </View>
-                    
-                    <TouchableOpacity style={styles.actionBtn} onPress={() => handleLogoUpload(school.id, school.name)}>
-                      <Ionicons name="image-outline" size={20} color={COLORS.primary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </View>
-          )}
 
-          {activeTab === 'notices' && (
+                      <TouchableOpacity style={styles.actionBtn} onPress={() => handleLogoUpload(school.id, school.name)}>
+                        <Ionicons name="image-outline" size={20} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    </View>
+
+                    {/* School Stats */}
+                    <View style={{ flexDirection: 'row', gap: SPACING.md, marginTop: SPACING.sm }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: COLORS.primary + '10', paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full }}>
+                        <Ionicons name="school-outline" size={14} color={COLORS.primary} />
+                        <Text style={{ ...FONTS.caption, color: COLORS.primary, fontWeight: '700' }}>{stats.learners}</Text>
+                        <Text style={{ ...FONTS.small, color: COLORS.primary }}>Learners</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, backgroundColor: COLORS.accent + '10', paddingHorizontal: SPACING.md, paddingVertical: SPACING.xs, borderRadius: RADIUS.full }}>
+                        <Ionicons name="briefcase-outline" size={14} color={COLORS.accent} />
+                        <Text style={{ ...FONTS.caption, color: COLORS.accent, fontWeight: '700' }}>{stats.teachers}</Text>
+                        <Text style={{ ...FONTS.small, color: COLORS.accent }}>Teachers</Text>
+                      </View>
+                      <View style={{ flex: 1 }} />
+                      <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            );
+          })()}
+
+          {/* NOTICES TAB */}
+          {activeTab === 'notices' && (() => {
+            const filteredNotices = noticesList.filter(n => {
+              const matchesSearch = n.title?.toLowerCase().includes(noticeSearchQuery.toLowerCase()) || 
+                                    n.content?.toLowerCase().includes(noticeSearchQuery.toLowerCase());
+              
+              let matchesScope = true;
+              if (noticeScopeFilter === 'National') matchesScope = !n.school_id;
+              else if (noticeScopeFilter === 'School') matchesScope = !!n.school_id;
+              
+              return matchesSearch && matchesScope;
+            });
+            return (
             <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowNoticeForm(true)}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => { setEditingNoticeId(null); setShowNoticeForm(true); }}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Post Notice</Text>
               </TouchableOpacity>
-              <Text style={styles.infoText}>Manage notice board announcements here.</Text>
               
-              {noticesList.map(notice => (
+              {/* Notices Search & Filter */}
+              <View style={{ marginBottom: SPACING.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.borderLight, ...SHADOWS.sm, marginBottom: SPACING.sm }}>
+                  <Ionicons name="search" size={18} color={COLORS.textMuted} />
+                  <TextInput
+                    style={{ flex: 1, ...FONTS.body, color: COLORS.textPrimary, marginLeft: SPACING.sm }}
+                    placeholder="Search notices..."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={noticeSearchQuery}
+                    onChangeText={setNoticeSearchQuery}
+                  />
+                  {noticeSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setNoticeSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                  {(['All', 'National', 'School'] as const).map(scope => (
+                    <TouchableOpacity
+                      key={scope}
+                      style={[styles.filterChip, noticeScopeFilter === scope && styles.filterChipActive]}
+                      onPress={() => setNoticeScopeFilter(scope)}
+                    >
+                      <Text style={[styles.filterChipText, noticeScopeFilter === scope && styles.filterChipTextActive]}>{scope}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{filteredNotices.length} notice(s) found.</Text>
+              
+              {filteredNotices.map(notice => (
                 <View key={notice.id} style={styles.adminCard}>
                   <View style={styles.adminCardHeader}>
                     <View style={{ flex: 1 }}>
@@ -956,21 +1379,73 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                         {notice.schools?.name || 'National'} {notice.is_urgent && '• URGENT'}
                       </Text>
                     </View>
+                    <View style={styles.adminCardActions}>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.accent + '15' }]} onPress={() => handleEditNotice(notice)}>
+                        <Ionicons name="create" size={16} color={COLORS.accent} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.redLight }]} onPress={() => handleDeleteNotice(notice.id)}>
+                        <Ionicons name="trash" size={16} color={COLORS.red} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               ))}
             </View>
-          )}
+            );
+          })()}
 
-          {activeTab === 'timetables' && (
+          {/* TIMETABLES TAB */}
+          {activeTab === 'timetables' && (() => {
+            const filteredTimetables = timetablesList.filter(t => {
+              const matchesSearch = (t.subject_name && t.subject_name.toLowerCase().includes(timetableSearchQuery.toLowerCase())) || 
+                                    (t.paper_code && t.paper_code.toLowerCase().includes(timetableSearchQuery.toLowerCase()));
+              
+              let matchesScope = true;
+              if (timetableScopeFilter === 'National') matchesScope = !t.school_id;
+              else if (timetableScopeFilter === 'School') matchesScope = !!t.school_id;
+              
+              return matchesSearch && matchesScope;
+            });
+            return (
             <View style={styles.tabContent}>
-              <TouchableOpacity style={styles.addBtn} onPress={() => setShowTimetableForm(true)}>
+              <TouchableOpacity style={styles.addBtn} onPress={() => { setEditingTimetableId(null); setShowTimetableForm(true); }}>
                 <Ionicons name="add-circle" size={20} color={COLORS.white} />
                 <Text style={styles.addBtnText}>Add Timetable Event</Text>
               </TouchableOpacity>
-              <Text style={styles.infoText}>Manage school and national exam timetables.</Text>
               
-              {timetablesList.map(item => (
+              {/* Timetables Search & Filter */}
+              <View style={{ marginBottom: SPACING.lg }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 10, borderWidth: 1, borderColor: COLORS.borderLight, ...SHADOWS.sm, marginBottom: SPACING.sm }}>
+                  <Ionicons name="search" size={18} color={COLORS.textMuted} />
+                  <TextInput
+                    style={{ flex: 1, ...FONTS.body, color: COLORS.textPrimary, marginLeft: SPACING.sm }}
+                    placeholder="Search events by subject or paper code..."
+                    placeholderTextColor={COLORS.textMuted}
+                    value={timetableSearchQuery}
+                    onChangeText={setTimetableSearchQuery}
+                  />
+                  {timetableSearchQuery.length > 0 && (
+                    <TouchableOpacity onPress={() => setTimetableSearchQuery('')}>
+                      <Ionicons name="close-circle" size={18} color={COLORS.textMuted} />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexDirection: 'row' }}>
+                  {(['All', 'National', 'School'] as const).map(scope => (
+                    <TouchableOpacity
+                      key={scope}
+                      style={[styles.filterChip, timetableScopeFilter === scope && styles.filterChipActive]}
+                      onPress={() => setTimetableScopeFilter(scope)}
+                    >
+                      <Text style={[styles.filterChipText, timetableScopeFilter === scope && styles.filterChipTextActive]}>{scope}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginBottom: SPACING.md }}>{filteredTimetables.length} event(s) found.</Text>
+              
+              {filteredTimetables.map(item => (
                 <View key={item.id} style={styles.adminCard}>
                   <View style={styles.adminCardHeader}>
                     <View style={{ flex: 1 }}>
@@ -979,11 +1454,20 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                         {item.exam_date} at {item.start_time} • {item.schools?.name || 'National'}
                       </Text>
                     </View>
+                    <View style={styles.adminCardActions}>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.accent + '15' }]} onPress={() => handleEditTimetable(item)}>
+                        <Ionicons name="create" size={16} color={COLORS.accent} />
+                      </TouchableOpacity>
+                      <TouchableOpacity style={[styles.actionBtn, { backgroundColor: COLORS.redLight }]} onPress={() => handleDeleteTimetable(item.id)}>
+                        <Ionicons name="trash" size={16} color={COLORS.red} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                 </View>
               ))}
             </View>
-          )}
+            );
+          })()}
 
           <View style={{ height: 40 }} />
         </View>
@@ -1209,25 +1693,11 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
               <Text style={styles.formLabel}>Content *</Text>
               <TextInput style={[styles.formInput, { height: 100 }]} placeholder="Notice details..." placeholderTextColor={COLORS.textMuted} value={noticeContent} onChangeText={setNoticeContent} multiline />
               
-              <Text style={styles.formLabel}>Target School</Text>
-              <View style={styles.pickerContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.xs, paddingHorizontal: SPACING.xs }}>
-                  <TouchableOpacity
-                    style={[styles.gradePill, noticeSchoolId === null && styles.gradePillActive]}
-                    onPress={() => setNoticeSchoolId(null)}
-                  >
-                    <Text style={[styles.gradePillText, noticeSchoolId === null && styles.gradePillTextActive]}>National / All</Text>
-                  </TouchableOpacity>
-                  {schoolsList.map(school => (
-                    <TouchableOpacity
-                      key={school.id}
-                      style={[styles.gradePill, noticeSchoolId === school.id && styles.gradePillActive]}
-                      onPress={() => setNoticeSchoolId(school.id)}
-                    >
-                      <Text style={[styles.gradePillText, noticeSchoolId === school.id && styles.gradePillTextActive]}>{school.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+              <Text style={styles.formLabel}>Content Scope</Text>
+              <View style={[styles.filterChip, styles.filterChipActive, { alignSelf: 'flex-start', marginBottom: SPACING.md }]}>
+                <Text style={styles.filterChipTextActive}>
+                  {isAdmin ? '● National' : `● My School — ${user?.school || 'Unknown'}`}
+                </Text>
               </View>
 
               <TouchableOpacity style={styles.uploadBtn} onPress={() => setNoticeIsUrgent(!noticeIsUrgent)}>
@@ -1235,7 +1705,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 <Text style={[styles.uploadBtnText, { color: noticeIsUrgent ? COLORS.red : COLORS.primary }]}>Mark as Urgent</Text>
               </TouchableOpacity>
 
-              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleAddNotice} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleSaveNotice} disabled={saving}>
                 {saving ? <ActivityIndicator color={COLORS.white} /> : (
                   <><Ionicons name="paper-plane" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Post Notice</Text></>
                 )}
@@ -1257,25 +1727,11 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
                 </TouchableOpacity>
               </View>
 
-              <Text style={styles.formLabel}>Target School</Text>
-              <View style={styles.pickerContainer}>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.xs, paddingHorizontal: SPACING.xs }}>
-                  <TouchableOpacity
-                    style={[styles.gradePill, timetableSchoolId === null && styles.gradePillActive]}
-                    onPress={() => setTimetableSchoolId(null)}
-                  >
-                    <Text style={[styles.gradePillText, timetableSchoolId === null && styles.gradePillTextActive]}>National / All</Text>
-                  </TouchableOpacity>
-                  {schoolsList.map(school => (
-                    <TouchableOpacity
-                      key={school.id}
-                      style={[styles.gradePill, timetableSchoolId === school.id && styles.gradePillActive]}
-                      onPress={() => setTimetableSchoolId(school.id)}
-                    >
-                      <Text style={[styles.gradePillText, timetableSchoolId === school.id && styles.gradePillTextActive]}>{school.name}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </ScrollView>
+              <Text style={styles.formLabel}>Content Scope</Text>
+              <View style={[styles.filterChip, styles.filterChipActive, { alignSelf: 'flex-start', marginBottom: SPACING.md }]}>
+                <Text style={styles.filterChipTextActive}>
+                  {isAdmin ? '● National' : `● My School — ${user?.school || 'Unknown'}`}
+                </Text>
               </View>
 
               <Text style={styles.formLabel}>Curriculum</Text>
@@ -1315,9 +1771,83 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
               <Text style={styles.formLabel}>Venue</Text>
               <TextInput style={styles.formInput} placeholder="e.g. Main Hall" placeholderTextColor={COLORS.textMuted} value={timetableVenue} onChangeText={setTimetableVenue} />
 
-              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleAddTimetable} disabled={saving}>
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }, { marginTop: SPACING.xl }]} onPress={handleSaveTimetable} disabled={saving}>
                 {saving ? <ActivityIndicator color={COLORS.white} /> : (
                   <><Ionicons name="add-circle" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Save Event</Text></>
+                )}
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      {/* MANAGE SCHOOL MODAL */}
+      <Modal visible={showManageSchoolForm} transparent animationType="slide">
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <ScrollView showsVerticalScrollIndicator={false}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>Manage School</Text>
+                <TouchableOpacity onPress={() => setShowManageSchoolForm(false)}>
+                  <Ionicons name="close" size={24} color={COLORS.textSecondary} />
+                </TouchableOpacity>
+              </View>
+
+              <View style={{ marginBottom: SPACING.lg, padding: SPACING.md, backgroundColor: COLORS.surfaceAlt, borderRadius: RADIUS.md }}>
+                <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>{manageSchoolUserName}</Text>
+                <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>{manageSchoolUserEmail}</Text>
+                <View style={[styles.roleBadge, { backgroundColor: COLORS.accent + '20', alignSelf: 'flex-start', marginTop: 8 }]}>
+                  <Text style={[styles.roleBadgeText, { color: COLORS.accent }]}>Teacher</Text>
+                </View>
+              </View>
+
+              <Text style={styles.formLabel}>School Assignment</Text>
+              <View style={styles.pickerContainer}>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.xs, paddingHorizontal: SPACING.xs }}>
+                  <TouchableOpacity
+                    style={[styles.gradePill, manageSchoolId === null && styles.gradePillActive]}
+                    onPress={() => setManageSchoolId(null)}
+                  >
+                    <Text style={[styles.gradePillText, manageSchoolId === null && styles.gradePillTextActive]}>Unassigned</Text>
+                  </TouchableOpacity>
+                  {schoolsList.map(school => (
+                    <TouchableOpacity
+                      key={school.id}
+                      style={[styles.gradePill, manageSchoolId === school.id && styles.gradePillActive]}
+                      onPress={() => setManageSchoolId(school.id)}
+                    >
+                      <Text style={[styles.gradePillText, manageSchoolId === school.id && styles.gradePillTextActive]}>{school.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+
+              <Text style={styles.formLabel}>School Admin Privileges</Text>
+              <TouchableOpacity
+                style={[
+                  styles.uploadBtn, 
+                  { borderColor: manageSchoolAdmin ? COLORS.primary : COLORS.border, backgroundColor: manageSchoolAdmin ? COLORS.primary + '10' : 'transparent', marginBottom: SPACING.md }
+                ]}
+                onPress={() => setManageSchoolAdmin(!manageSchoolAdmin)}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
+                  <Ionicons name={manageSchoolAdmin ? "checkbox" : "square-outline"} size={24} color={manageSchoolAdmin ? COLORS.primary : COLORS.textMuted} />
+                  <View>
+                    <Text style={{ ...FONTS.bodyBold, color: manageSchoolAdmin ? COLORS.primary : COLORS.textPrimary }}>School Admin {manageSchoolAdmin ? 'ON' : 'OFF'}</Text>
+                    <Text style={{ ...FONTS.caption, color: COLORS.textMuted }}>{manageSchoolAdmin ? 'Can manage school content' : 'Ordinary teacher'}</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+
+              <View style={{ backgroundColor: COLORS.red + '10', padding: SPACING.sm, borderRadius: RADIUS.sm, flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: SPACING.xl }}>
+                <Ionicons name="information-circle" size={16} color={COLORS.red} />
+                <Text style={{ ...FONTS.caption, color: COLORS.red, flex: 1 }}>
+                  Platform Admin status cannot be modified here.
+                </Text>
+              </View>
+
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={handleManageSchool} disabled={saving}>
+                {saving ? <ActivityIndicator color={COLORS.white} /> : (
+                  <><Ionicons name="save" size={20} color={COLORS.white} /><Text style={styles.saveBtnText}>Save Assignment</Text></>
                 )}
               </TouchableOpacity>
             </ScrollView>

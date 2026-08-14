@@ -141,7 +141,7 @@ export default function QuizzesScreen() {
       return;
     }
     const key = `${topic.topicName}-${topic.gradeLevel}-${topic.subject}`;
-    await toggleBookmark(key, 'quiz', topic.topicName, topic);
+    await toggleBookmark(key, 'quiz', topic.topicName, topic as unknown as Record<string, unknown>);
   };
 
   return (

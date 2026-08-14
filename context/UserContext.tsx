@@ -26,7 +26,7 @@ export interface Bookmark {
   item_id: string;
   item_type: 'paper' | 'quiz';
   title: string;
-  metadata?: any;
+  metadata?: Record<string, unknown>;
   created_at?: string;
 }
 
@@ -45,7 +45,7 @@ interface UserContextType {
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
-  toggleBookmark: (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => Promise<void>;
+  toggleBookmark: (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: Record<string, unknown>) => Promise<void>;
   isBookmarked: (item_id: string) => boolean;
   manageSubscriptions: () => Promise<void>;
   refreshSubscription: () => Promise<void>;
@@ -357,8 +357,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (updatedData.grade_level !== undefined) payload.grade_level = updatedData.grade_level;
       if (updatedData.school !== undefined) payload.school = updatedData.school;
       if (updatedData.school_id !== undefined) payload.school_id = updatedData.school_id;
-      if (updatedData.school_locked !== undefined) payload.school_locked = updatedData.school_locked;
-      if (updatedData.is_school_admin !== undefined) payload.is_school_admin = updatedData.is_school_admin;
+      // school_locked and is_school_admin are strictly controlled by server-side RPCs.
       if (updatedData.subjects !== undefined) payload.subjects = updatedData.subjects;
       if (avatarUrl !== user.avatar_url) payload.avatar_url = avatarUrl;
 
@@ -387,8 +386,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         return { success: false, error: error.message };
       }
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message };
+    } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
     }
   };
 
@@ -428,7 +427,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const toggleBookmark = async (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: any) => {
+  const toggleBookmark = async (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: Record<string, unknown>) => {
     if (!user) return;
     const existing = bookmarks.find(b => b.item_id === item_id);
     if (existing) {

@@ -144,7 +144,7 @@ export default function PapersScreen() {
       setAuthVisible(true);
       return;
     }
-    await toggleBookmark(paper.id, 'paper', paper.title, paper);
+    await toggleBookmark(paper.id, 'paper', paper.title, paper as unknown as Record<string, unknown>);
   };
 
   const handleViewSolution = (paper: Paper) => {
@@ -341,17 +341,72 @@ export default function PapersScreen() {
           </View>
         ) : (
           <View style={styles.papersList}>
-            {filteredPapers.map(paper => (
-              <PaperCard
-                key={paper.id}
-                paper={paper}
-                isPro={isPro}
-                isBookmarked={isBookmarked(paper.id)}
-                onDownloadPaper={handleDownloadPaper}
-                onViewSolution={handleViewSolution}
-                onToggleBookmark={handleToggleBookmark}
-              />
-            ))}
+            {(() => {
+              // Group papers: Subject -> Grade -> Year
+              const grouped: Record<string, Record<string, Record<string, Paper[]>>> = {};
+              
+              filteredPapers.forEach(paper => {
+                const subject = paper.subject || 'Unknown Subject';
+                const grade = paper.grade_level || 'Unknown Grade';
+                const year = paper.year ? paper.year.toString() : 'Unknown Year';
+
+                if (!grouped[subject]) grouped[subject] = {};
+                if (!grouped[subject][grade]) grouped[subject][grade] = {};
+                if (!grouped[subject][grade][year]) grouped[subject][grade][year] = [];
+                
+                grouped[subject][grade][year].push(paper);
+              });
+
+              // Sort subjects alphabetically
+              return Object.keys(grouped).sort().map(subject => (
+                <View key={subject} style={styles.subjectGroup}>
+                  <Text style={styles.subjectHeader}>{subject.toUpperCase()}</Text>
+                  
+                  {/* Sort grades alphabetically */}
+                  {Object.keys(grouped[subject]).sort().map(grade => (
+                    <View key={grade} style={styles.gradeGroup}>
+                      <View style={styles.gradeHeaderContainer}>
+                        <View style={styles.gradePill}>
+                          <Text style={styles.gradeHeaderText}>{grade}</Text>
+                        </View>
+                      </View>
+                      
+                      {/* Sort years descending */}
+                      {Object.keys(grouped[subject][grade]).sort((a, b) => {
+                        if (a === 'Unknown Year') return 1;
+                        if (b === 'Unknown Year') return -1;
+                        return Number(b) - Number(a);
+                      }).map(year => (
+                        <View key={year} style={styles.yearGroup}>
+                          <View style={styles.yearHeaderRow}>
+                            <Text style={styles.yearHeaderText}>{year}</Text>
+                            <View style={styles.yearDivider} />
+                          </View>
+                          
+                          <View style={styles.paperCardsContainer}>
+                            {/* Papers are already sorted by paper_number ascending by Supabase, 
+                                but we ensure stable sort just in case */}
+                            {grouped[subject][grade][year]
+                              .sort((a, b) => (a.paper_number || 0) - (b.paper_number || 0))
+                              .map(paper => (
+                              <PaperCard
+                                key={paper.id}
+                                paper={paper}
+                                isPro={isPro}
+                                isBookmarked={isBookmarked(paper.id)}
+                                onDownloadPaper={handleDownloadPaper}
+                                onViewSolution={handleViewSolution}
+                                onToggleBookmark={handleToggleBookmark}
+                              />
+                            ))}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))}
+                </View>
+              ));
+            })()}
           </View>
         )}
 
@@ -397,5 +452,61 @@ const styles = StyleSheet.create({
   loadingText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.md },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },
   emptyTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md },
-  emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs },
+  emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs, textAlign: 'center', paddingHorizontal: SPACING.xl },
+  
+  // Hierarchy Styles
+  subjectGroup: {
+    marginBottom: SPACING.xl,
+  },
+  subjectHeader: {
+    ...FONTS.h3,
+    color: COLORS.primary,
+    fontWeight: '800',
+    marginBottom: SPACING.md,
+    letterSpacing: 0.5,
+  },
+  gradeGroup: {
+    marginBottom: SPACING.lg,
+    paddingLeft: SPACING.sm,
+  },
+  gradeHeaderContainer: {
+    flexDirection: 'row',
+    marginBottom: SPACING.md,
+  },
+  gradePill: {
+    backgroundColor: COLORS.surfaceAlt,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  gradeHeaderText: {
+    ...FONTS.small,
+    color: COLORS.textSecondary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+  },
+  yearGroup: {
+    marginBottom: SPACING.lg,
+    paddingLeft: SPACING.md,
+  },
+  yearHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
+  },
+  yearHeaderText: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+    marginRight: SPACING.md,
+  },
+  yearDivider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: COLORS.borderLight,
+  },
+  paperCardsContainer: {
+    gap: SPACING.md,
+  },
 });

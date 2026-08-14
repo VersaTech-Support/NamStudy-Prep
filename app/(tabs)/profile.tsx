@@ -209,7 +209,19 @@ export default function ProfileScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Subscription */}
+        {/* Quick Access Menu — visible for ALL authenticated users */}
+        <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
+          <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Quick Access</Text>
+          {menuItems.map((item, i) => (
+            <TouchableOpacity key={i} style={styles.menuItem} onPress={item.onPress} activeOpacity={0.7}>
+              <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={20} color={item.color} /></View>
+              <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary, flex: 1 }}>{item.label}</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Subscription — hidden for admins */}
         {isPro === true && !showAdminDashboard ? (
           <View style={styles.subscriptionCard}>
             <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: SPACING.md }}>
@@ -249,20 +261,6 @@ export default function ProfileScreen() {
 
         {/* Admin Dashboard */}
         {showAdminDashboard && <AdminDashboard onlineUsersCount={onlineUsersCount} />}
-
-        {/* Consumer Menus */}
-        {!showAdminDashboard && (
-          <View style={{ marginHorizontal: SPACING.xl, marginTop: SPACING.xxl }}>
-            <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Quick Access</Text>
-            {menuItems.map((item, i) => (
-              <TouchableOpacity key={i} style={styles.menuItem} onPress={item.onPress} activeOpacity={0.7}>
-                <View style={[styles.menuIcon, { backgroundColor: item.color + '15' }]}><Ionicons name={item.icon as any} size={20} color={item.color} /></View>
-                <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary, flex: 1 }}>{item.label}</Text>
-                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
 
         {/* Recent Payments for Consumers */}
         {payments.length > 0 && !showAdminDashboard && (
