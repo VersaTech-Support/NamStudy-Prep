@@ -19,7 +19,7 @@ import UpgradeModal from '@/components/UpgradeModal';
 import AuthModal from '@/components/AuthModal';
 
 export default function BookmarksScreen() {
-  const { user, isPro, bookmarks, toggleBookmark, isBookmarked } = useUser();
+  const { user, isPro, canAccessSolutions, bookmarks, toggleBookmark, isBookmarked } = useUser();
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<'papers' | 'quizzes'>('papers');
   const [upgradeVisible, setUpgradeVisible] = useState(false);
@@ -49,7 +49,7 @@ export default function BookmarksScreen() {
   };
 
   const handleViewSolution = (paper: any) => {
-    if (!isPro) {
+    if (!canAccessSolutions) {
       setUpgradeVisible(true);
       return;
     }
@@ -67,8 +67,8 @@ export default function BookmarksScreen() {
   const handleTopicPress = (topic: any) => {
     router.push({
       pathname: '/quiz/[topic]',
-      params: { 
-        topic: topic.topicName, 
+      params: {
+        topic: topic.topicName,
         gradeLevel: topic.gradeLevel,
         subject: topic.subject
       },
@@ -129,7 +129,7 @@ export default function BookmarksScreen() {
                   <PaperCard
                     key={bookmark.id}
                     paper={paper}
-                    isPro={isPro}
+                    canAccessSolutions={canAccessSolutions}
                     isBookmarked={true}
                     onDownloadPaper={handleDownloadPaper}
                     onViewSolution={handleViewSolution}
