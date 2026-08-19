@@ -157,11 +157,15 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        await withTimeout(
-          fetchUserProfile(session.user.id),
-          10000,
-          'User profile fetch'
-        );
+        try {
+          await withTimeout(
+            fetchUserProfile(session.user.id),
+            10000,
+            'User profile fetch'
+          );
+        } catch (e) {
+          console.warn('Profile fetch timeout in auth listener:', e);
+        }
         try {
           if (Platform.OS !== 'web') {
             const { customerInfo } = await withTimeout(
@@ -229,7 +233,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (error) {
-      console.error('Session check error:', error);
+      console.warn('Session check error (expected if offline):', error);
     } finally {
       setLoading(false);
     }
@@ -278,7 +282,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         updateUserStreak(data.id);
       }
     } catch (err) {
-      console.error('Unexpected profile fetch error:', err);
+      console.warn('Unexpected profile fetch error (expected if offline):', err);
       setUser(null);
     }
   };
