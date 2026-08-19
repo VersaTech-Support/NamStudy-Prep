@@ -3,6 +3,21 @@ import { Platform, View, ActivityIndicator } from 'react-native';
 import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { supabase } from '@/lib/supabase';
 
+const withTimeout = <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  operationName: string
+): Promise<T> => {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => {
+        reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+    }),
+  ]);
+};
+
 interface UserProfile {
   id: string;
   name: string;
@@ -34,6 +49,7 @@ interface UserContextType {
   user: UserProfile | null;
   isPro: boolean | undefined;
   isAdmin: boolean;
+  canAccessSolutions: boolean;
   loading: boolean;
   bookmarks: Bookmark[];
   streak: number;
@@ -69,7 +85,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   // Supabase Realtime Presence
   useEffect(() => {
     const channel = supabase.channel('namstudy-presence');
-    
+
     channel.on('presence', { event: 'sync' }, () => {
       const state = channel.presenceState();
       let count = 0;
@@ -141,12 +157,24 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
-        await fetchUserProfile(session.user.id);
+        await withTimeout(
+          fetchUserProfile(session.user.id),
+          10000,
+          'User profile fetch'
+        );
         try {
           if (Platform.OS !== 'web') {
-            const { customerInfo } = await Purchases.logIn(session.user.id);
+            const { customerInfo } = await withTimeout(
+              Purchases.logIn(session.user.id),
+              10000,
+              'RevenueCat logIn'
+            );
             setCustomerInfo(customerInfo);
-            await syncRevenueCatToSupabase(customerInfo, session.user.id);
+            await withTimeout(
+              syncRevenueCatToSupabase(customerInfo, session.user.id),
+              10000,
+              'RevenueCat Supabase sync'
+            );
           }
         } catch (e) {
           console.error('RevenueCat logIn error:', e);
@@ -175,14 +203,26 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const checkSession = async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await withTimeout(
+        supabase.auth.getSession(),
+        10000,
+        'Supabase getSession'
+      );
       if (session?.user) {
         await fetchUserProfile(session.user.id);
         try {
           if (Platform.OS !== 'web') {
-            const { customerInfo } = await Purchases.logIn(session.user.id);
+            const { customerInfo } = await withTimeout(
+              Purchases.logIn(session.user.id),
+              10000,
+              'RevenueCat logIn'
+            );
             setCustomerInfo(customerInfo);
-            await syncRevenueCatToSupabase(customerInfo, session.user.id);
+            await withTimeout(
+              syncRevenueCatToSupabase(customerInfo, session.user.id),
+              10000,
+              'RevenueCat Supabase sync'
+            );
           }
         } catch (e) {
           console.error('RevenueCat logIn error:', e);
@@ -201,12 +241,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       let error = null;
       // Retry loop to handle the Supabase auth trigger race condition (slow local DBs)
       for (let i = 0; i < 5; i++) {
-        const result = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', userId)
-          .maybeSingle();
-        
+        const result = await withTimeout<any>(
+          supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .maybeSingle() as unknown as Promise<any>,
+          10000,
+          'Supabase user profile query'
+        );
+
         data = result.data;
         error = result.error;
 
@@ -457,13 +501,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const updateUserStreak = async (userId: string) => {
     try {
       const todayStr = new Date().toISOString().split('T')[0];
-      
+
       const { data, error } = await supabase
         .from('user_streaks')
         .select('*')
         .eq('user_id', userId)
         .single();
-        
+
       if (error && error.code !== 'PGRST116') {
         console.error('Streak fetch error:', error.message);
         return;
@@ -552,9 +596,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       const { error: uploadError } = await supabase.storage
         .from('school-logos')
-        .upload(filePath, blob, { 
+        .upload(filePath, blob, {
           upsert: true,
-          contentType: blob.type || 'image/jpeg' 
+          contentType: blob.type || 'image/jpeg'
         });
 
       if (uploadError) {
@@ -592,10 +636,10 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   } else {
     // Web (or any platform where RevenueCat is unavailable by design) — Supabase fallback.
     isPro = user?.subscription_status === 'VIP'
-         || user?.subscription_status === 'Pro'
-         || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
+      || user?.subscription_status === 'Pro'
+      || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
   }
-  
+
   const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   if (loading) {
@@ -606,8 +650,11 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
+  const isSchoolAdmin = user?.is_school_admin === true;
+  const canAccessSolutions = isAdmin || isSchoolAdmin || isPro === true;
+
   return (
-    <UserContext.Provider value={{ user, isPro, isAdmin, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
+    <UserContext.Provider value={{ user, isPro, isAdmin, canAccessSolutions, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
       {children}
     </UserContext.Provider>
   );

@@ -34,7 +34,7 @@ interface Paper {
 }
 
 export default function PapersScreen() {
-  const { user, isPro, toggleBookmark, isBookmarked } = useUser();
+  const { user, isPro, canAccessSolutions, toggleBookmark, isBookmarked } = useUser();
   const router = useRouter();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
@@ -152,7 +152,7 @@ export default function PapersScreen() {
       setAuthVisible(true);
       return;
     }
-    if (!isPro) {
+    if (!canAccessSolutions) {
       router.push('/payment');
       return;
     }
@@ -392,7 +392,7 @@ export default function PapersScreen() {
                               <PaperCard
                                 key={paper.id}
                                 paper={paper}
-                                isPro={isPro}
+                                canAccessSolutions={canAccessSolutions}
                                 isBookmarked={isBookmarked(paper.id)}
                                 onDownloadPaper={handleDownloadPaper}
                                 onViewSolution={handleViewSolution}
