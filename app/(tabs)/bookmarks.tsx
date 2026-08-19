@@ -54,9 +54,10 @@ export default function BookmarksScreen() {
       return;
     }
     if (paper.solution_pdf_url) {
-      Linking.openURL(paper.solution_pdf_url).catch(() => {
-        Alert.alert('Solution', `Opening step-by-step solution for: ${paper.title}`);
-      });
+      router.push({
+        pathname: '/secure-viewer',
+        params: { filePath: paper.solution_pdf_url }
+      } as any);
     }
   };
 
