@@ -67,12 +67,7 @@ export default function SecureViewer() {
             if (!actualFilePath) {
                 console.error('SecureViewer: missing filePath');
                 setLoading(false);
-                alert('Unable to open the solution: the document path is missing.');
-                if (router.canGoBack()) {
-                    router.back();
-                } else {
-                    router.replace('/');
-                }
+                setError('Unable to open the solution: the document path is missing.');
                 return;
             }
 

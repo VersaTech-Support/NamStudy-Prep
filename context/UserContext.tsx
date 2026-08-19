@@ -153,37 +153,74 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       Purchases.addCustomerInfoUpdateListener(customerInfoListener);
     }
 
-    checkSession();
+    let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        try {
-          await withTimeout(
-            fetchUserProfile(session.user.id),
-            10000,
-            'User profile fetch'
-          );
-        } catch (e) {
-          console.warn('Profile fetch timeout in auth listener:', e);
+    const initializeAuth = async () => {
+      try {
+        if (__DEV__) console.log('[Startup] Supabase client initialized');
+        if (__DEV__) console.log('[Startup] getSession started');
+        const { data: { session }, error } = await withTimeout(
+          supabase.auth.getSession(),
+          10000,
+          'Supabase getSession'
+        );
+        if (__DEV__) console.log('[Startup] getSession completed');
+
+        if (error) {
+          console.warn('Supabase getSession error (expected if offline):', error.message);
         }
-        try {
+
+        if (session?.user) {
+          if (__DEV__) console.log('[Startup] profile fetch started');
+          await fetchUserProfile(session.user.id);
+          if (__DEV__) console.log('[Startup] profile fetch completed');
+
           if (Platform.OS !== 'web') {
-            const { customerInfo } = await withTimeout(
-              Purchases.logIn(session.user.id),
-              10000,
-              'RevenueCat logIn'
-            );
-            setCustomerInfo(customerInfo);
-            await withTimeout(
-              syncRevenueCatToSupabase(customerInfo, session.user.id),
-              10000,
-              'RevenueCat Supabase sync'
-            );
+            try {
+              if (__DEV__) console.log('[Startup] RevenueCat initialization started');
+              const { customerInfo } = await withTimeout(
+                Purchases.logIn(session.user.id),
+                10000,
+                'RevenueCat logIn'
+              );
+              setCustomerInfo(customerInfo);
+              withTimeout(
+                syncRevenueCatToSupabase(customerInfo, session.user.id),
+                10000,
+                'RevenueCat Supabase sync'
+              ).catch(e => console.error(e));
+              if (__DEV__) console.log('[Startup] RevenueCat initialization completed');
+            } catch (e) {
+              console.error('RevenueCat logIn error:', e);
+            }
           }
-        } catch (e) {
-          console.error('RevenueCat logIn error:', e);
         }
-      } else {
+      } catch (error) {
+        console.warn('Session check error (expected if offline):', error);
+      } finally {
+        if (mounted) {
+          if (__DEV__) console.log('[Startup] global loading false');
+          setLoading(false);
+        }
+      }
+    };
+
+    initializeAuth();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'INITIAL_SESSION') {
+        return;
+      }
+
+      if (session?.user) {
+        fetchUserProfile(session.user.id);
+        if (Platform.OS !== 'web') {
+          Purchases.logIn(session.user.id).then(({ customerInfo }) => {
+            setCustomerInfo(customerInfo);
+            syncRevenueCatToSupabase(customerInfo, session.user.id);
+          }).catch(console.error);
+        }
+      } else if (event === 'SIGNED_OUT') {
         setUser(null);
         setCustomerInfo(null);
         try {
@@ -194,50 +231,16 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           console.error('RevenueCat logOut error:', e);
         }
       }
-      setLoading(false);
     });
 
     return () => {
+      mounted = false;
       subscription.unsubscribe();
       if (Platform.OS !== 'web') {
         Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
       }
     };
   }, []);
-
-  const checkSession = async () => {
-    try {
-      const { data: { session } } = await withTimeout(
-        supabase.auth.getSession(),
-        10000,
-        'Supabase getSession'
-      );
-      if (session?.user) {
-        await fetchUserProfile(session.user.id);
-        try {
-          if (Platform.OS !== 'web') {
-            const { customerInfo } = await withTimeout(
-              Purchases.logIn(session.user.id),
-              10000,
-              'RevenueCat logIn'
-            );
-            setCustomerInfo(customerInfo);
-            await withTimeout(
-              syncRevenueCatToSupabase(customerInfo, session.user.id),
-              10000,
-              'RevenueCat Supabase sync'
-            );
-          }
-        } catch (e) {
-          console.error('RevenueCat logIn error:', e);
-        }
-      }
-    } catch (error) {
-      console.warn('Session check error (expected if offline):', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const fetchUserProfile = async (userId: string) => {
     try {

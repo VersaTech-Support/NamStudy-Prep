@@ -40,7 +40,7 @@ const extractStoragePath = (fullUrl: string) => {
   };
 };
 
-export default function SecureViewerWeb() {
+export default function ViewerWeb() {
   const { filePath } = useLocalSearchParams();
 
   const [secureUrl, setSecureUrl] = useState<string | null>(null);
@@ -93,7 +93,7 @@ export default function SecureViewerWeb() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#7C3AED" />
-        <Text style={styles.text}>Securing document...</Text>
+        <Text style={styles.text}>Loading document...</Text>
       </View>
     );
   }
