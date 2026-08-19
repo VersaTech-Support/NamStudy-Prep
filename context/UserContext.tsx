@@ -469,9 +469,9 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
       if (data) setBookmarks(data);
-      if (error) console.error('Fetch bookmarks error:', error.message);
+      if (error) console.warn('Fetch bookmarks error (expected if offline):', error.message);
     } catch (err) {
-      console.error('Fetch bookmarks exception:', err);
+      console.warn('Fetch bookmarks exception (expected if offline):', err);
     }
   };
 
@@ -513,7 +513,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Streak fetch error:', error.message);
+        console.warn('Streak fetch error (expected if offline):', error.message);
         return;
       }
 
@@ -561,7 +561,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
       if (!updateErr) setStreak(newStreak);
     } catch (err) {
-      console.error('Streak exception:', err);
+      console.warn('Streak exception (expected if offline):', err);
     }
   };
 
