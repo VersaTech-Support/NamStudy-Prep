@@ -13,7 +13,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import RevenueCatUI from 'react-native-purchases-ui';
+import Purchases from 'react-native-purchases';
+import RevenueCatUI, { PAYWALL_RESULT } from 'react-native-purchases-ui';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -41,7 +42,7 @@ const BANK_DETAILS = {
 };
 
 export default function PaymentScreen() {
-  const { user, isPro, customerInfo, manageSubscriptions, refreshSubscription } = useUser();
+  const { user, isPro, customerInfo, revenueCatReady, revenueCatError, manageSubscriptions, refreshSubscription } = useUser();
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [payment, setPayment] = useState<Payment | null>(null);
@@ -61,33 +62,117 @@ export default function PaymentScreen() {
   const hasRevenueCatSub = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
 
   const handlePresentPaywall = async () => {
+    if (Platform.OS !== 'android') {
+      Alert.alert('Unavailable', 'Google Play subscriptions are only available on Android.');
+      return;
+    }
+
+    if (!revenueCatReady) {
+      Alert.alert('Please Wait', 'Subscription service is still initializing. Please try again in a moment.');
+      return;
+    }
+
+    if (revenueCatError) {
+      Alert.alert(
+        'Subscription Unavailable',
+        'The subscription service could not be reached. Please check your connection and try again.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
     setPaywallLoading(true);
     try {
+      // Fetch and validate offerings
+      if (__DEV__) console.log('[Subscription] Fetching offerings...');
+      const offerings = await Purchases.getOfferings();
+
+      const currentOffering = offerings.current;
+
+      if (!currentOffering) {
+        throw new Error('No current RevenueCat offering is available for this user.');
+      }
+
+      if (__DEV__) {
+        console.log('[Subscription] Current offering:', currentOffering.identifier);
+        console.log('[Subscription] Available packages:', currentOffering.availablePackages.map(p => p.identifier));
+        currentOffering.availablePackages.forEach(pkg => {
+          console.log(`[Subscription] Package: ${pkg.identifier}, Product: ${pkg.product.identifier}`);
+        });
+      }
+
+      if (!currentOffering.availablePackages.length) {
+        throw new Error('The current offering has no available packages.');
+      }
+
+      // Verify expected packages exist
+      const packageIds = currentOffering.availablePackages.map(p => p.identifier);
+      if (!packageIds.includes('$rc_monthly') && !packageIds.includes('$rc_annual')) {
+        console.warn('[Subscription] Warning: Expected $rc_monthly or $rc_annual packages not found. Available:', packageIds);
+      }
+
+      // Present the paywall
+      if (__DEV__) console.log('[Subscription] Presenting paywall...');
       const result = await RevenueCatUI.presentPaywallIfNeeded({
+        offering: currentOffering,
         requiredEntitlementIdentifier: 'NamibStudy Prep Pro',
       });
 
-      if (result === 'PURCHASED' || result === 'RESTORED') {
-        await refreshSubscription();
-        Alert.alert(
-          '🎉 Welcome to Pro!',
-          'Your NamibStudy Prep Pro access has been activated instantly. Enjoy all premium features!',
-          [{ text: 'Awesome!', onPress: () => router.back() }]
-        );
-      } else if (result === 'NOT_PRESENTED') {
-        await refreshSubscription();
-        Alert.alert(
-          'Already Active',
-          'You already have NamibStudy Prep Pro access!',
-          [{ text: 'OK', onPress: () => router.back() }]
-        );
+      if (__DEV__) console.log('[Subscription] Paywall result:', result);
+
+      switch (result) {
+        case PAYWALL_RESULT.PURCHASED:
+          if (__DEV__) console.log('[Subscription] Purchase completed, refreshing...');
+          await refreshSubscription();
+          Alert.alert(
+            '🎉 Welcome to Pro!',
+            'Your NamibStudy Prep Pro access has been activated instantly. Enjoy all premium features!',
+            [{ text: 'Awesome!', onPress: () => router.back() }]
+          );
+          break;
+
+        case PAYWALL_RESULT.RESTORED:
+          if (__DEV__) console.log('[Subscription] Restore completed, refreshing...');
+          await refreshSubscription();
+          Alert.alert(
+            '🎉 Subscription Restored!',
+            'Your NamibStudy Prep Pro access has been restored successfully.',
+            [{ text: 'Great!', onPress: () => router.back() }]
+          );
+          break;
+
+        case PAYWALL_RESULT.NOT_PRESENTED:
+          await refreshSubscription();
+          Alert.alert(
+            'Already Active',
+            'You already have NamibStudy Prep Pro access!',
+            [{ text: 'OK', onPress: () => router.back() }]
+          );
+          break;
+
+        case PAYWALL_RESULT.CANCELLED:
+          if (__DEV__) console.log('[Subscription] User cancelled paywall');
+          // User dismissed, do nothing
+          break;
+
+        case PAYWALL_RESULT.ERROR:
+          console.error('[Subscription] Paywall returned error result');
+          Alert.alert(
+            'Something went wrong',
+            'We couldn\'t complete the subscription. Please try again or use the bank transfer option below.',
+            [{ text: 'OK' }]
+          );
+          break;
+
+        default:
+          if (__DEV__) console.log('[Subscription] Unhandled paywall result:', result);
+          break;
       }
-      // 'CANCELLED' or 'ERROR' – user dismissed, do nothing
     } catch (error: any) {
-      console.error('Paywall error:', error);
+      console.error('[Subscription] Paywall error:', error);
       Alert.alert(
         'Something went wrong',
-        'We couldn\'t open the subscription page. You can try again or use the bank transfer option below.',
+        error?.message || 'We couldn\'t open the subscription page. You can try again or use the bank transfer option below.',
         [{ text: 'OK' }]
       );
     } finally {
@@ -273,9 +358,42 @@ export default function PaymentScreen() {
   }
 
   if (isPro === undefined) {
+    // RevenueCat is still initializing — show a spinner with context
+    if (revenueCatError) {
+      // RevenueCat failed — show actionable error, never an infinite spinner
+      return (
+        <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+          <View style={styles.header}>
+            <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+              <Ionicons name="arrow-back" size={24} color={COLORS.white} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Payment</Text>
+            <View style={{ width: 40 }} />
+          </View>
+          <View style={styles.centeredContent}>
+            <Ionicons name="cloud-offline-outline" size={56} color={COLORS.textMuted} />
+            <Text style={[styles.emptyTitle, { marginTop: SPACING.md }]}>Subscription service unavailable</Text>
+            <Text style={[styles.emptyText, { textAlign: 'center', marginHorizontal: SPACING.xl }]}>
+              We couldn't connect to the subscription service. Please check your connection and try again.
+            </Text>
+            <TouchableOpacity
+              style={[styles.primaryActionBtn, { marginTop: SPACING.lg }]}
+              onPress={() => refreshSubscription()}
+            >
+              <Text style={styles.primaryActionBtnText}>Try Again</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.laterBtn} onPress={() => router.back()}>
+              <Text style={styles.laterBtnText}>Go Back</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      );
+    }
+
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+        <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.md }}>Checking subscription status...</Text>
       </View>
     );
   }

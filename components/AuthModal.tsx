@@ -120,7 +120,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
           await supabase.from('users').update({
             school: finalSchoolName,
             school_id: finalSchoolId,
-            school_locked: !!finalSchoolId
+            school_locked: false
           }).eq('id', session.user.id);
         }
         onClose();

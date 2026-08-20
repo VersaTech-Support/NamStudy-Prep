@@ -55,6 +55,8 @@ interface UserContextType {
   streak: number;
   onlineUsersCount: number;
   customerInfo: CustomerInfo | null;
+  revenueCatReady: boolean;
+  revenueCatError: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS', role: 'student' | 'teacher', schoolId?: string | null, schoolName?: string | null) => Promise<boolean>;
   updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; school_id?: string; school_locked?: boolean; is_school_admin?: boolean; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
@@ -77,6 +79,8 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const [streak, setStreak] = useState(0);
   const [onlineUsersCount, setOnlineUsersCount] = useState(0);
   const [customerInfo, setCustomerInfo] = useState<CustomerInfo | null>(null);
+  const [revenueCatReady, setRevenueCatReady] = useState(false);
+  const [revenueCatError, setRevenueCatError] = useState<string | null>(null);
 
   // Ref to hold latest user for stable access inside listeners (avoids stale closures)
   const userRef = useRef<UserProfile | null>(user);
@@ -115,8 +119,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       const hasEntitlement = info.entitlements.active['NamibStudy Prep Pro'] !== undefined;
       const targetStatus = hasEntitlement ? 'VIP' : 'FREE';
 
+      if (__DEV__) console.log('[RevenueCat → Supabase] Sync:', { hasEntitlement, targetStatus });
+
       // Compare before writing — skip if already correct
-      if (userRef.current?.subscription_status === targetStatus) return;
+      if (userRef.current?.subscription_status === targetStatus) {
+        if (__DEV__) console.log('[RevenueCat → Supabase] Already in sync, skipping write');
+        return;
+      }
 
       // Update Supabase
       const { error } = await supabase
@@ -125,20 +134,86 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         .eq('id', userId);
 
       if (error) {
-        console.error('Sync RevenueCat → Supabase error:', error.message);
+        console.error('[RevenueCat → Supabase] Update error:', error.message);
         return; // Do NOT update local state on failure
       }
+
+      if (__DEV__) console.log('[RevenueCat → Supabase] Supabase updated to:', targetStatus);
 
       // Only update local state after successful DB write
       setUser(prev => prev ? { ...prev, subscription_status: targetStatus } : prev);
     } catch (err) {
-      console.error('Sync RevenueCat → Supabase exception:', err);
+      console.error('[RevenueCat → Supabase] Sync exception:', err);
+    }
+  };
+
+  /**
+   * Log a user into RevenueCat and sync their subscription state.
+   * Single entry point — called from both startup and onAuthStateChange.
+   */
+  const initializeRevenueCatForUser = async (userId: string) => {
+    if (Platform.OS !== 'android') return;
+
+    try {
+      if (__DEV__) console.log('[RevenueCat] Logging in user');
+
+      const { customerInfo: info } = await withTimeout(
+        Purchases.logIn(userId),
+        10000,
+        'RevenueCat logIn'
+      );
+
+      setCustomerInfo(info);
+      setRevenueCatReady(true);
+      setRevenueCatError(null);
+
+      if (__DEV__) {
+        const entitlements = Object.keys(info.entitlements.active);
+        console.log('[RevenueCat] Login success. Active entitlements:', entitlements);
+      }
+
+      await withTimeout(
+        syncRevenueCatToSupabase(info, userId),
+        10000,
+        'RevenueCat Supabase sync'
+      );
+    } catch (error) {
+      console.error('[RevenueCat] logIn error:', error);
+
+      setRevenueCatError(
+        error instanceof Error
+          ? error.message
+          : 'Unable to initialize RevenueCat for this user'
+      );
+
+      setRevenueCatReady(true);
     }
   };
 
   useEffect(() => {
-    if (Platform.OS !== 'web' && Platform.OS === 'android') {
-      Purchases.configure({ apiKey: 'goog_tJlncTghUDnHSBUfHKUcvVEFEAK' });
+    // Configure RevenueCat SDK (exactly once)
+    if (Platform.OS === 'android') {
+      const revenueCatAndroidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_KEY;
+
+      if (!revenueCatAndroidKey) {
+        const errorMessage = 'RevenueCat Android public SDK key is not configured.';
+        console.error('[RevenueCat] Configuration error:', errorMessage);
+        setRevenueCatError(errorMessage);
+        setRevenueCatReady(true);
+      } else {
+        try {
+          Purchases.configure({ apiKey: revenueCatAndroidKey });
+          if (__DEV__) console.log('[RevenueCat] Android SDK configured');
+        } catch (error) {
+          console.error('[RevenueCat] Configure failed:', error);
+          setRevenueCatError(
+            error instanceof Error
+              ? error.message
+              : 'RevenueCat configuration failed'
+          );
+          setRevenueCatReady(true);
+        }
+      }
     }
 
     const customerInfoListener = (info: CustomerInfo) => {
@@ -149,7 +224,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         syncRevenueCatToSupabase(info, currentUserId);
       }
     };
-    if (Platform.OS !== 'web') {
+    if (Platform.OS === 'android') {
       Purchases.addCustomerInfoUpdateListener(customerInfoListener);
     }
 
@@ -175,24 +250,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
           await fetchUserProfile(session.user.id);
           if (__DEV__) console.log('[Startup] profile fetch completed');
 
-          if (Platform.OS !== 'web') {
-            try {
-              if (__DEV__) console.log('[Startup] RevenueCat initialization started');
-              const { customerInfo } = await withTimeout(
-                Purchases.logIn(session.user.id),
-                10000,
-                'RevenueCat logIn'
-              );
-              setCustomerInfo(customerInfo);
-              withTimeout(
-                syncRevenueCatToSupabase(customerInfo, session.user.id),
-                10000,
-                'RevenueCat Supabase sync'
-              ).catch(e => console.error(e));
-              if (__DEV__) console.log('[Startup] RevenueCat initialization completed');
-            } catch (e) {
-              console.error('RevenueCat logIn error:', e);
-            }
+          if (__DEV__) console.log('[Startup] RevenueCat user initialization started');
+          await initializeRevenueCatForUser(session.user.id);
+          if (__DEV__) console.log('[Startup] RevenueCat user initialization completed');
+        } else {
+          // No user session — RevenueCat is configured but no user to log in
+          if (Platform.OS === 'android') {
+            setRevenueCatReady(true);
           }
         }
       } catch (error) {
@@ -213,22 +277,21 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       }
 
       if (session?.user) {
+        if (__DEV__) console.log('[Auth] State change:', event, '— initializing user');
         fetchUserProfile(session.user.id);
-        if (Platform.OS !== 'web') {
-          Purchases.logIn(session.user.id).then(({ customerInfo }) => {
-            setCustomerInfo(customerInfo);
-            syncRevenueCatToSupabase(customerInfo, session.user.id);
-          }).catch(console.error);
-        }
+        await initializeRevenueCatForUser(session.user.id);
       } else if (event === 'SIGNED_OUT') {
+        if (__DEV__) console.log('[Auth] Signed out — clearing state');
         setUser(null);
         setCustomerInfo(null);
+        setRevenueCatReady(false);
+        setRevenueCatError(null);
         try {
-          if (Platform.OS !== 'web') {
+          if (Platform.OS === 'android') {
             await Purchases.logOut();
           }
         } catch (e) {
-          console.error('RevenueCat logOut error:', e);
+          console.error('[RevenueCat] logOut error:', e);
         }
       }
     });
@@ -236,7 +299,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     return () => {
       mounted = false;
       subscription.unsubscribe();
-      if (Platform.OS !== 'web') {
+      if (Platform.OS === 'android') {
         Purchases.removeCustomerInfoUpdateListener(customerInfoListener);
       }
     };
@@ -334,7 +397,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
             role,
             school_id: schoolId || null,
             school: schoolName || null,
-            school_locked: !!schoolId,
+            school_locked: false,
           },
         },
       });
@@ -570,15 +633,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const refreshSubscription = async () => {
     try {
-      if (Platform.OS === 'web') return;
+      if (Platform.OS !== 'android') return;
+      if (__DEV__) console.log('[Subscription] Refreshing customer info');
       const info = await Purchases.getCustomerInfo();
       setCustomerInfo(info);
+
+      if (__DEV__) {
+        const entitlements = Object.keys(info.entitlements.active);
+        console.log('[Subscription] Active entitlements:', entitlements);
+      }
+
       const currentUserId = userRef.current?.id;
       if (currentUserId) {
         await syncRevenueCatToSupabase(info, currentUserId);
       }
     } catch (error) {
-      console.error('Error refreshing subscription:', error);
+      console.error('[Subscription] Refresh error:', error);
     }
   };
 
@@ -625,16 +695,20 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   };
 
   const hasRevenueCatEntitlement = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
-  const isRevenueCatPlatform = Platform.OS !== 'web';
+  const isRevenueCatPlatform = Platform.OS === 'android';
 
   let isPro: boolean | undefined = undefined;
   if (loading) {
     isPro = undefined;
   } else if (isRevenueCatPlatform) {
-    // Native: RevenueCat is the sole subscription authority.
-    if (customerInfo === null) {
+    // Android: RevenueCat is the sole subscription authority.
+    if (!revenueCatReady) {
       // RevenueCat still initializing — do NOT fall back to stale Supabase data.
       isPro = undefined;
+    } else if (revenueCatError && customerInfo === null) {
+      // RevenueCat failed and we have no customer info — cannot determine status.
+      // UI should show error state (not infinite spinner).
+      isPro = false;
     } else {
       // RevenueCat has resolved — use its entitlement as the single source of truth.
       // Stale Supabase subscription_status cannot override this.
@@ -661,7 +735,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
   const canAccessSolutions = isAdmin || isSchoolAdmin || isPro === true;
 
   return (
-    <UserContext.Provider value={{ user, isPro, isAdmin, canAccessSolutions, loading, bookmarks, streak, onlineUsersCount, customerInfo, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
+    <UserContext.Provider value={{ user, isPro, isAdmin, canAccessSolutions, loading, bookmarks, streak, onlineUsersCount, customerInfo, revenueCatReady, revenueCatError, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
       {children}
     </UserContext.Provider>
   );
