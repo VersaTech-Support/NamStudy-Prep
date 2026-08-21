@@ -35,11 +35,18 @@ export const COLORS = {
   textSecondary: '#475569',
   textMuted: '#94A3B8',
   textWhite: '#FFFFFF',
+  textOnPrimary: '#FFFFFF',
   
   // Gradient colors
   gradientStart: '#7C3AED',
   gradientMid: '#3B82F6',
   gradientEnd: '#06B6D4',
+};
+
+export const GRADIENTS = {
+  primary: ['#7C3AED', '#5B21B6'] as const,
+  accent: ['#3B82F6', '#2563EB'] as const,
+  gold: ['#F59E0B', '#D97706'] as const,
 };
 
 export const SHADOWS = {

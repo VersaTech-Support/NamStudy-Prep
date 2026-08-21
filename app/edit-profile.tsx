@@ -22,7 +22,7 @@ export default function EditProfileScreen() {
 
   const [name, setName] = useState(user?.name || '');
   const [school, setSchool] = useState(user?.school || '');
-  const [gradeLevel, setGradeLevel] = useState<'NSSCO' | 'NSSCAS'>(user?.grade_level || 'NSSCO');
+  const [gradeLevel, setGradeLevel] = useState<'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level'>(user?.grade_level || 'NSSCO');
   const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
 
   useEffect(() => {
@@ -181,6 +181,25 @@ export default function EditProfileScreen() {
             >
               <Text style={[styles.gradeBtnText, gradeLevel === 'NSSCAS' && styles.gradeBtnTextActive]}>
                 NSSCAS (Gr 12)
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <View style={[styles.gradeSelectorContainer, { marginTop: SPACING.sm }]}>
+            <TouchableOpacity
+              style={[styles.gradeBtn, gradeLevel === 'IGCSE' && { backgroundColor: COLORS.accent, borderColor: COLORS.accent }]}
+              onPress={() => setGradeLevel('IGCSE')}
+            >
+              <Text style={[styles.gradeBtnText, gradeLevel === 'IGCSE' && styles.gradeBtnTextActive]}>
+                IGCSE (Cambridge)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.gradeBtn, gradeLevel === 'AS Level' && { backgroundColor: COLORS.primaryDark, borderColor: COLORS.primaryDark }]}
+              onPress={() => setGradeLevel('AS Level')}
+            >
+              <Text style={[styles.gradeBtnText, gradeLevel === 'AS Level' && styles.gradeBtnTextActive]}>
+                AS Level (Cambridge)
               </Text>
             </TouchableOpacity>
           </View>

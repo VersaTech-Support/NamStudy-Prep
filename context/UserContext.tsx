@@ -22,7 +22,7 @@ interface UserProfile {
   id: string;
   name: string;
   email: string;
-  grade_level: 'NSSCO' | 'NSSCAS';
+  grade_level: 'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level';
   subscription_status: string;
   expiry_date: string | null;
   is_admin: boolean;
@@ -59,7 +59,7 @@ interface UserContextType {
   revenueCatError: string | null;
   login: (email: string, password: string) => Promise<boolean>;
   signup: (name: string, email: string, password: string, gradeLevel: 'NSSCO' | 'NSSCAS', role: 'student' | 'teacher', schoolId?: string | null, schoolName?: string | null) => Promise<boolean>;
-  updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS'; school?: string; school_id?: string; school_locked?: boolean; is_school_admin?: boolean; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
+  updateProfile: (updatedData: { name?: string; grade_level?: 'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level'; school?: string; school_id?: string; school_locked?: boolean; is_school_admin?: boolean; subjects?: string[]; avatar_file?: { uri: string; type: string; name: string } }) => Promise<boolean>;
   updatePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
@@ -419,7 +419,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
 
   const updateProfile = async (updatedData: {
     name?: string;
-    grade_level?: 'NSSCO' | 'NSSCAS';
+    grade_level?: 'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level';
     school?: string;
     school_id?: string;
     school_locked?: boolean;

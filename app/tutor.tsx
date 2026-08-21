@@ -84,8 +84,15 @@ export default function TutorScreen() {
         content: m.content,
       }));
 
+      // Build the context object for the Edge Function
+      const userContext = {
+        curriculum: user?.grade_level === 'IGCSE' || user?.grade_level === 'AS Level' ? 'Cambridge' : 'Namibian',
+        gradeLevel: user?.grade_level || 'NSSCO',
+        subjects: user?.subjects || []
+      };
+
       const { data, error } = await supabase.functions.invoke('ai-tutor', {
-        body: { messages: chatHistory },
+        body: { messages: chatHistory, context: userContext },
       });
 
       if (error) {
@@ -272,27 +279,17 @@ export default function TutorScreen() {
             onChangeText={setInputText}
             multiline
             maxLength={500}
-            editable={false}
+            editable={!isTyping}
           />
           <TouchableOpacity 
-            style={[styles.sendBtn, styles.sendBtnDisabled]} 
+            style={[styles.sendBtn, (!inputText.trim() || isTyping) && styles.sendBtnDisabled]} 
             onPress={handleSend}
-            disabled={true}
+            disabled={!inputText.trim() || isTyping}
           >
             <Ionicons name="send" size={18} color={COLORS.white} />
           </TouchableOpacity>
         </View>
 
-        {/* Coming Soon Overlay */}
-        <View style={styles.overlay}>
-          <View style={styles.overlayIconContainer}>
-            <Ionicons name="lock-closed" size={48} color={COLORS.primary} />
-          </View>
-          <Text style={styles.overlayTitle}>Coming Soon</Text>
-          <Text style={styles.overlaySubtitle}>
-            We are putting the final touches on NamTutor AI. Get ready for your ultimate 24/7 Namibian study companion!
-          </Text>
-        </View>
       </KeyboardAvoidingView>
     </View>
   );
