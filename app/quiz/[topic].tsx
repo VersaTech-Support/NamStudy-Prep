@@ -18,6 +18,7 @@ import { supabase } from '@/lib/supabase';
 interface QuizQuestion {
   id: string;
   topic_name: string;
+  topic_id?: string;
   question: string;
   option_a: string;
   option_b: string;
@@ -30,7 +31,7 @@ interface QuizQuestion {
 }
 
 export default function QuizScreen() {
-  const { topic, gradeLevel } = useLocalSearchParams<{ topic: string; gradeLevel: string }>();
+  const { topic, gradeLevel, topic_id } = useLocalSearchParams<{ topic: string; gradeLevel: string; topic_id?: string }>();
   const router = useRouter();
   const { user, isPro } = useUser();
 
@@ -49,11 +50,15 @@ export default function QuizScreen() {
 
   const fetchQuestions = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('quizzes')
-      .select('*')
-      .eq('topic_name', topic)
-      .eq('grade_level', gradeLevel);
+    let query = supabase.from('quizzes').select('*');
+    
+    if (topic_id) {
+      query = query.eq('topic_id', topic_id);
+    } else {
+      query = query.eq('topic_name', topic).eq('grade_level', gradeLevel);
+    }
+
+    const { data, error } = await query;
 
     if (data) {
       // Shuffle questions

@@ -12,6 +12,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import { useLocalSearchParams } from 'expo-router';
 import AuthModal from '@/components/AuthModal';
 
 interface Flashcard {
@@ -21,10 +22,12 @@ interface Flashcard {
   topic: string;
   front_content: string;
   back_content: string;
+  topic_id?: string;
 }
 
 export default function FlashcardsScreen() {
   const { user } = useUser();
+  const { topic_id, topic_name } = useLocalSearchParams<{ topic_id?: string; topic_name?: string }>();
   const [cards, setCards] = useState<Flashcard[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -55,6 +58,12 @@ export default function FlashcardsScreen() {
       
       if (!userIsAdmin && user?.grade_level) {
         query = query.eq('grade_level', user.grade_level);
+      }
+      
+      if (topic_id) {
+        query = query.eq('topic_id', topic_id);
+      } else if (topic_name) {
+        query = query.eq('topic', topic_name);
       }
 
       const { data, error } = await query;

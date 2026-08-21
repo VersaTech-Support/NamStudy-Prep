@@ -12,7 +12,7 @@ import {
   Keyboard,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -23,11 +23,13 @@ interface AIMessage {
   role: 'user' | 'assistant';
   content: string;
   created_at: string;
+  actions?: { type: 'quiz' | 'flashcards' | 'topic' }[];
 }
 
 export default function TutorScreen() {
   const router = useRouter();
   const { user } = useUser();
+  const params = useLocalSearchParams<{ topicId?: string; topicName?: string; subject?: string; grade?: string; curriculum?: string }>();
   const [messages, setMessages] = useState<AIMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(true);
@@ -61,7 +63,6 @@ export default function TutorScreen() {
       console.error('Fetch AI messages exception:', err);
     } finally {
       setLoading(false);
-      // Wait a moment for layout then scroll to bottom
       setTimeout(() => scrollToBottom(), 500);
     }
   };
@@ -76,19 +77,21 @@ export default function TutorScreen() {
     setIsTyping(true);
 
     let replyContent = "I'm having trouble connecting right now. Please try again in a moment!";
+    let parsedActions: any[] = [];
 
     try {
-      // Build the message history for the Edge Function (last 20 messages for context)
       const chatHistory = allMessages.slice(-20).map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      // Build the context object for the Edge Function
       const userContext = {
-        curriculum: user?.grade_level === 'IGCSE' || user?.grade_level === 'AS Level' ? 'Cambridge' : 'Namibian',
-        gradeLevel: user?.grade_level || 'NSSCO',
-        subjects: user?.subjects || []
+        curriculum: params.curriculum || (user?.grade_level === 'IGCSE' || user?.grade_level === 'AS Level' ? 'Cambridge' : 'Namibian'),
+        gradeLevel: params.grade || user?.grade_level || 'NSSCO',
+        subjects: user?.subjects || [],
+        topicId: params.topicId,
+        topicName: params.topicName,
+        currentSubject: params.subject
       };
 
       const { data, error } = await supabase.functions.invoke('ai-tutor', {
@@ -97,24 +100,24 @@ export default function TutorScreen() {
 
       if (error) {
         console.error('Edge Function error:', error.message || error);
-        // Try to extract the response body for more detail
         if (error.context && typeof error.context.json === 'function') {
           try {
             const errBody = await error.context.json();
-            console.error('Edge Function response body:', JSON.stringify(errBody));
-            if (errBody?.reply) {
-              replyContent = errBody.reply;
+            console.error('Edge Function diagnostic:', JSON.stringify(errBody));
+            if (errBody?.details) {
+              console.error('Upstream details:', errBody.details);
             }
-          } catch (_) { /* ignore parsing error */ }
+            if (errBody?.reply) replyContent = errBody.reply;
+          } catch (_) { /* ignore */ }
         }
       } else if (data?.reply) {
         replyContent = data.reply;
+        if (data.actions) parsedActions = data.actions;
       }
     } catch (err: any) {
       console.error('Failed to invoke AI tutor:', err?.message || err);
     }
 
-    // Save the assistant's reply to the database
     const aiMsg = {
       user_id: user?.id,
       role: 'assistant',
@@ -124,7 +127,9 @@ export default function TutorScreen() {
     try {
       const { data, error } = await supabase.from('ai_messages').insert(aiMsg).select().single();
       if (data && !error) {
-        setMessages((prev) => [...prev, data as AIMessage]);
+        const newMessage = data as AIMessage;
+        newMessage.actions = parsedActions; // Attach transient actions
+        setMessages((prev) => [...prev, newMessage]);
         setTimeout(() => scrollToBottom(), 100);
       }
     } catch (e) {
@@ -147,7 +152,6 @@ export default function TutorScreen() {
       content,
     };
 
-    // Optimistic update
     const tempId = Date.now().toString();
     const optimisticMsg: AIMessage = { ...userMsg, id: tempId, role: 'user', created_at: new Date().toISOString() };
     setMessages((prev) => [...prev, optimisticMsg]);
@@ -162,7 +166,6 @@ export default function TutorScreen() {
       console.error('Failed to save user message:', e);
     }
 
-    // Trigger real AI response — pass the full conversation including the new user message
     getAIResponse([...messages, optimisticMsg]);
   };
 
@@ -179,6 +182,28 @@ export default function TutorScreen() {
           <Text style={[styles.messageText, isUser ? styles.messageTextUser : styles.messageTextAssistant]}>
             {item.content}
           </Text>
+          {item.actions && item.actions.length > 0 && (
+            <View style={styles.actionsContainer}>
+              {item.actions.map((action, idx) => {
+                let iconName: any = 'arrow-forward';
+                let label = 'View';
+                if (action.type === 'quiz') { iconName = 'help-circle-outline'; label = 'Practice Quiz'; } 
+                else if (action.type === 'flashcards') { iconName = 'albums-outline'; label = 'Review Flashcards'; } 
+                else if (action.type === 'topic') { iconName = 'book-outline'; label = 'View Topic'; }
+                return (
+                  <TouchableOpacity key={idx} style={styles.actionButton} onPress={() => {
+                      if (!params.topicId) return;
+                      if (action.type === 'quiz') router.push(`/quiz/${encodeURIComponent(params.topicName || '')}?topic_id=${params.topicId}&subject=${encodeURIComponent(params.subject || '')}` as any);
+                      else if (action.type === 'flashcards') router.push(`/flashcards?topic_id=${params.topicId}&topic_name=${encodeURIComponent(params.topicName || '')}` as any);
+                      else if (action.type === 'topic') router.push(`/topic/${params.topicId}` as any);
+                    }}>
+                    <Ionicons name={iconName} size={16} color={COLORS.primary} />
+                    <Text style={styles.actionButtonText}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
         </View>
       </View>
     );
@@ -211,7 +236,6 @@ export default function TutorScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={24} color={COLORS.white} />
@@ -224,6 +248,16 @@ export default function TutorScreen() {
           <Text style={styles.headerSubtitle}>Your 24/7 Namibian Exam Expert</Text>
         </View>
       </View>
+
+      {params.topicName && (
+        <View style={styles.contextBanner}>
+          <Ionicons name="school" size={14} color={COLORS.primary} style={{ marginRight: 6 }} />
+          <Text style={styles.contextBannerText} numberOfLines={1}>
+            Studying: <Text style={{ fontWeight: '600' }}>{params.topicName}</Text>
+            {params.subject ? ` (${params.curriculum ? params.curriculum + ' • ' : ''}${params.subject})` : ''}
+          </Text>
+        </View>
+      )}
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -242,16 +276,29 @@ export default function TutorScreen() {
             renderItem={renderMessage}
             contentContainerStyle={styles.chatContent}
             showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyChatContainer}>
-                <View style={styles.emptyChatIconBg}>
-                  <Ionicons name="school" size={32} color={COLORS.primary} />
+            ListHeaderComponent={
+              messages.length === 0 && !isTyping ? (
+                <View style={styles.emptyChatContainer}>
+                  <View style={styles.emptyChatIconBg}>
+                    <Ionicons name="sparkles" size={40} color={COLORS.primary} />
+                  </View>
+                  <Text style={styles.emptyChatTitle}>Hi {user?.name?.split(' ')[0] || 'there'}!</Text>
+                  <Text style={styles.emptyChatText}>
+                    {params.topicName 
+                      ? `I'm ready to help you with ${params.topicName}. What do you want to learn?` 
+                      : 'I am your personal study assistant. Ask me anything about your school work!'}
+                  </Text>
+                  {params.topicName && (
+                    <View style={styles.suggestedPromptsContainer}>
+                      {["Explain this topic simply", "Test me on this topic", "Give me an exam-style example", "What are the common mistakes?"].map((promptText, i) => (
+                        <TouchableOpacity key={i} style={styles.suggestedPromptChip} onPress={() => { setInputText(promptText); setTimeout(() => handleSend(), 0); }}>
+                          <Text style={styles.suggestedPromptText}>{promptText}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.emptyChatTitle}>Hello! I'm NamTutor AI</Text>
-                <Text style={styles.emptyChatText}>
-                  Ask me anything about your NSSCO or NSSCAS studies. I can help explain difficult concepts, provide study tips, or quiz you!
-                </Text>
-              </View>
+              ) : null
             }
             ListFooterComponent={
               isTyping ? (
@@ -269,7 +316,6 @@ export default function TutorScreen() {
           />
         )}
 
-        {/* Input Area */}
         <View style={styles.inputContainer}>
           <TextInput
             style={styles.textInput}
@@ -289,7 +335,6 @@ export default function TutorScreen() {
             <Ionicons name="send" size={18} color={COLORS.white} />
           </TouchableOpacity>
         </View>
-
       </KeyboardAvoidingView>
     </View>
   );
@@ -311,97 +356,36 @@ const styles = StyleSheet.create({
   headerTitleContainer: { flex: 1 },
   headerTitle: { ...FONTS.h2, color: COLORS.white },
   headerSubtitle: { ...FONTS.small, color: 'rgba(255,255,255,0.8)' },
-  
+  contextBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.primaryLight + '30', paddingHorizontal: SPACING.lg, paddingVertical: SPACING.sm, borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
+  contextBannerText: { ...FONTS.small, color: COLORS.primaryDark, flex: 1 },
   centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xxxl },
   emptyTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md },
   emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs, marginBottom: SPACING.xl, textAlign: 'center' },
   authBtn: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xxl, paddingVertical: 12, borderRadius: RADIUS.md },
   authBtnText: { ...FONTS.bodyBold, color: COLORS.white },
-  
   chatContent: { padding: SPACING.xl, paddingBottom: SPACING.xxl },
-  
   emptyChatContainer: { alignItems: 'center', justifyContent: 'center', paddingVertical: SPACING.xxxl, marginTop: SPACING.xl },
   emptyChatIconBg: { width: 64, height: 64, borderRadius: 32, backgroundColor: COLORS.primaryLight + '30', alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg },
   emptyChatTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.sm },
   emptyChatText: { ...FONTS.body, color: COLORS.textSecondary, textAlign: 'center', lineHeight: 22, paddingHorizontal: SPACING.lg },
-  
   messageWrapper: { flexDirection: 'row', marginBottom: SPACING.md, alignItems: 'flex-end' },
   messageWrapperUser: { justifyContent: 'flex-end' },
   messageWrapperAssistant: { justifyContent: 'flex-start' },
-  
   avatarAssistant: { width: 28, height: 28, borderRadius: 14, backgroundColor: COLORS.primaryLight + '40', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.sm },
-  
   messageBubble: { maxWidth: '80%', padding: SPACING.md, borderRadius: RADIUS.lg },
   messageBubbleUser: { backgroundColor: COLORS.primary, borderBottomRightRadius: 4 },
   messageBubbleAssistant: { backgroundColor: COLORS.white, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: COLORS.borderLight, ...SHADOWS.sm },
-  
   messageText: { ...FONTS.body, lineHeight: 22 },
   messageTextUser: { color: COLORS.white },
   messageTextAssistant: { color: COLORS.textPrimary },
-  
-  inputContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'flex-end', 
-    padding: SPACING.lg, 
-    paddingBottom: Platform.OS === 'ios' ? 36 : 48, // Extra padding to clear Android nav bar
-    backgroundColor: COLORS.white, 
-    borderTopWidth: 1, 
-    borderTopColor: COLORS.borderLight 
-  },
-  textInput: { 
-    flex: 1, 
-    backgroundColor: COLORS.background, 
-    borderRadius: RADIUS.lg, 
-    paddingHorizontal: SPACING.md, 
-    paddingTop: 12,
-    paddingBottom: 12,
-    minHeight: 44,
-    maxHeight: 120,
-    ...FONTS.body, 
-    color: COLORS.textPrimary 
-  },
-  sendBtn: { 
-    width: 44, 
-    height: 44, 
-    borderRadius: 22, 
-    backgroundColor: COLORS.primary, 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    marginLeft: SPACING.sm,
-    ...SHADOWS.sm 
-  },
+  actionsContainer: { marginTop: SPACING.md, gap: SPACING.xs, borderTopWidth: 1, borderTopColor: 'rgba(0,0,0,0.05)', paddingTop: SPACING.md },
+  actionButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, paddingVertical: SPACING.xs, paddingHorizontal: SPACING.sm, borderRadius: RADIUS.sm, borderWidth: 1, borderColor: COLORS.primary, alignSelf: 'flex-start' },
+  actionButtonText: { ...FONTS.caption, fontWeight: '600', color: COLORS.primary, marginLeft: 6 },
+  inputContainer: { flexDirection: 'row', alignItems: 'flex-end', padding: SPACING.lg, paddingBottom: Platform.OS === 'ios' ? 36 : 48, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
+  textInput: { flex: 1, backgroundColor: COLORS.background, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingTop: 12, paddingBottom: 12, minHeight: 44, maxHeight: 120, ...FONTS.body, color: COLORS.textPrimary },
+  sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginLeft: SPACING.sm, ...SHADOWS.sm },
   sendBtnDisabled: { backgroundColor: COLORS.borderLight, shadowOpacity: 0 },
-  overlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.75)',
-    zIndex: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.xxxl,
-  },
-  overlayIconContainer: {
-    width: 96,
-    height: 96,
-    borderRadius: 48,
-    backgroundColor: COLORS.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.lg,
-    ...SHADOWS.md,
-  },
-  overlayTitle: {
-    ...FONTS.h2,
-    color: COLORS.primaryDark,
-    marginBottom: SPACING.md,
-  },
-  overlaySubtitle: {
-    ...FONTS.body,
-    color: COLORS.textSecondary,
-    textAlign: 'center',
-    lineHeight: 24,
-  },
+  suggestedPromptsContainer: { marginTop: SPACING.xl, gap: SPACING.sm, width: '100%' },
+  suggestedPromptChip: { backgroundColor: COLORS.white, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.primaryLight, shadowColor: COLORS.textPrimary, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  suggestedPromptText: { ...FONTS.caption, color: COLORS.primary, textAlign: 'center', fontWeight: '500' }
 });

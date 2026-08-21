@@ -51,6 +51,7 @@ interface Quiz {
   id: string;
   subject?: string | null;
   topic_name?: string | null;
+  topic_id?: string | null;
   question?: string | null;
   option_a?: string | null;
   option_b?: string | null;

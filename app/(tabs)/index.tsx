@@ -27,6 +27,7 @@ import AuthModal from '@/components/AuthModal';
 interface QuizAttempt {
   id: string;
   topic_name: string;
+  topic_id?: string;
   score: number;
   total_questions: number;
   subject?: string;
@@ -39,6 +40,9 @@ interface SubjectStat {
   percentage: number;
   attempts: number;
 }
+
+import { LinearGradient } from 'expo-linear-gradient';
+import { FEATURES } from '@/constants/features';
 
 export default function HomeScreen() {
   const { user, isPro, streak } = useUser();
@@ -207,7 +211,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <SectionHeader title="Continue Studying" />
           {recentAttempt ? (
-            <GradientCard gradient={GRADIENTS.primary} onPress={() => router.push({ pathname: '/quiz/[topic]', params: { topic: recentAttempt.topic_name, gradeLevel: recentAttempt.grade_level || 'NSSCO' } } as any)}>
+            <GradientCard gradient={GRADIENTS.primary} onPress={() => recentAttempt.topic_id ? router.push(`/topic/${recentAttempt.topic_id}` as any) : router.push({ pathname: '/quiz/[topic]', params: { topic: recentAttempt.topic_name, gradeLevel: recentAttempt.grade_level || 'NSSCO' } } as any)}>
                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                  <View style={{ flex: 1 }}>
                    <Text style={{ ...FONTS.caption, color: COLORS.white, opacity: 0.8 }}>Latest Activity</Text>
@@ -233,7 +237,7 @@ export default function HomeScreen() {
           <SectionHeader title="Recommended for You" subtitle="Focus on areas that need improvement" />
           {weakTopics.length > 0 ? (
             weakTopics.map((topic, i) => (
-              <TouchableOpacity key={i} style={styles.recommendedCard} onPress={() => router.push({ pathname: '/quiz/[topic]', params: { topic: topic.topic_name, gradeLevel: topic.grade_level || 'NSSCO' } } as any)}>
+              <TouchableOpacity key={i} style={styles.recommendedCard} onPress={() => topic.topic_id ? router.push(`/topic/${topic.topic_id}` as any) : router.push({ pathname: '/quiz/[topic]', params: { topic: topic.topic_name, gradeLevel: topic.grade_level || 'NSSCO' } } as any)}>
                 <View style={styles.recommendedIcon}>
                   <Ionicons name="trending-up" size={20} color={COLORS.accent} />
                 </View>
@@ -290,7 +294,13 @@ export default function HomeScreen() {
              <ToolCard icon="document-text" title="Papers" color={COLORS.green} onPress={() => router.push('/papers')} />
              <ToolCard icon="help-circle" title="Quizzes" color={COLORS.accent} onPress={() => router.push('/quizzes')} />
              <ToolCard icon="albums" title="Flashcards" color={COLORS.primary} onPress={() => router.push('/flashcards')} />
-             <ToolCard icon="chatbubbles" title="NamTutor" color={COLORS.gold} onPress={() => router.push('/tutor')} badge="NEW" />
+             <ToolCard 
+               icon="chatbubbles" 
+               title="NamTutor" 
+               color={FEATURES.ENABLE_NAMTUTOR ? COLORS.gold : COLORS.textMuted} 
+               onPress={() => { if (FEATURES.ENABLE_NAMTUTOR) router.push('/tutor'); }} 
+               badge={FEATURES.ENABLE_NAMTUTOR ? "NEW" : "Coming Soon"} 
+             />
              <ToolCard icon="bookmark" title="Saved" color={COLORS.red} onPress={() => router.push('/bookmarks')} />
              <ToolCard icon="stats-chart" title="Progress" color={COLORS.primaryDark} onPress={() => router.push('/analytics')} />
           </View>
@@ -391,7 +401,15 @@ export default function HomeScreen() {
         {[
           { icon: 'albums', title: 'Revision Flashcards', desc: 'Active recall study cards tailored to your selected subjects.', color: COLORS.primary, bg: COLORS.primaryLight + '30', action: () => router.push('/flashcards') },
           { icon: 'document-text', title: 'Free Past Papers', desc: 'Access all NSSCO & NSSCAS past exam papers from 2019-2024 completely free.', color: COLORS.green, bg: COLORS.greenLight, action: () => router.push('/papers') },
-          { icon: 'chatbubbles', title: 'NamTutor AI', desc: 'Get 24/7 instant help with past papers, topics, and study tips.', color: COLORS.gold, bg: COLORS.goldLight, action: () => router.push('/tutor'), badge: 'NEW' },
+          { 
+            icon: 'chatbubbles', 
+            title: 'NamTutor AI', 
+            desc: 'Get 24/7 instant help with past papers, topics, and study tips.', 
+            color: COLORS.gold, 
+            bg: COLORS.goldLight, 
+            action: () => { if (FEATURES.ENABLE_NAMTUTOR) router.push('/tutor'); }, 
+            badge: FEATURES.ENABLE_NAMTUTOR ? 'NEW' : 'Coming Soon' 
+          },
           { icon: 'key', title: 'Golden Memos', desc: 'Detailed step-by-step worked solutions to every exam paper. VIP only.', color: COLORS.gold, bg: COLORS.goldLight, action: () => router.push('/papers'), premium: true },
         ].map((feature, i) => (
           <TouchableOpacity key={i} style={styles.featureCard} onPress={feature.action} activeOpacity={0.7}>
