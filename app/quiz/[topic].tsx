@@ -15,6 +15,11 @@ import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 
+import { getUserMastery } from '@/lib/learning/mastery';
+import { getNextBestActions } from '@/lib/learning/recommendations';
+import { StudyRecommendation } from '@/lib/learning/types';
+import RecommendationCard from '@/components/ui/RecommendationCard';
+
 interface QuizQuestion {
   id: string;
   topic_name: string;
@@ -43,10 +48,33 @@ export default function QuizScreen() {
   const [score, setScore] = useState(0);
   const [answered, setAnswered] = useState(0);
   const [quizComplete, setQuizComplete] = useState(false);
+  const [recommendation, setRecommendation] = useState<StudyRecommendation | null>(null);
 
   useEffect(() => {
     fetchQuestions();
   }, []);
+
+  useEffect(() => {
+    if (quizComplete && user) {
+      // Delay fetching by a bit to ensure the newly saved quiz result is committed and readable
+      setTimeout(async () => {
+        try {
+          const masteryData = await getUserMastery(user.id);
+          const nextActions = getNextBestActions({
+            topicMastery: masteryData.topicMastery,
+            subjectMastery: masteryData.subjectMastery,
+            userSubjects: user.subjects || ['Mathematics'],
+            isPro,
+          });
+          if (nextActions.length > 0) {
+            setRecommendation(nextActions[0]);
+          }
+        } catch (err) {
+          console.error("Failed to load post-quiz recommendation", err);
+        }
+      }, 500);
+    }
+  }, [quizComplete, user]);
 
   const fetchQuestions = async () => {
     setLoading(true);
@@ -228,7 +256,29 @@ export default function QuizScreen() {
           <Text style={[styles.resultMessage, { color: getResultColor() }]}>{getResultMessage()}</Text>
           <Text style={styles.resultTopic}>{topic} - {gradeLevel}</Text>
 
-          <View style={styles.resultActions}>
+          {recommendation && (
+            <View style={{ width: '100%', marginTop: SPACING.xl, marginBottom: SPACING.lg }}>
+              <Text style={{ ...FONTS.h3, color: COLORS.textPrimary, marginBottom: SPACING.md }}>Recommended Next</Text>
+              <RecommendationCard 
+                recommendation={recommendation}
+                onPress={() => {
+                  if (recommendation.type === 'topic_quiz' || recommendation.type === 'continue') {
+                    if (recommendation.topicId) router.replace(`/topic/${recommendation.topicId}`);
+                    else router.replace({ pathname: '/quiz/[topic]', params: { topic: recommendation.topicName || 'Unknown', gradeLevel: recommendation.gradeLevel || gradeLevel } });
+                  } else if (recommendation.type === 'review_topic') {
+                    if (recommendation.topicId) router.replace(`/topic/${recommendation.topicId}`);
+                    else router.replace('/quizzes');
+                  } else if (recommendation.type === 'past_paper') {
+                    router.replace('/papers');
+                  } else if (recommendation.type === 'flashcards') {
+                    router.replace('/flashcards');
+                  }
+                }}
+              />
+            </View>
+          )}
+
+          <View style={[styles.resultActions, { marginTop: recommendation ? 0 : SPACING.xxxl }]}>
             <TouchableOpacity style={styles.retryBtn} onPress={handleRestart} activeOpacity={0.8}>
               <Ionicons name="refresh" size={20} color={COLORS.white} />
               <Text style={styles.retryBtnText}>Try Again</Text>
