@@ -14,7 +14,11 @@ import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 
-interface QuizAttempt {
+import { getUserMastery } from '@/lib/learning/mastery';
+import { SubjectMastery, TopicMastery } from '@/lib/learning/types';
+
+// Raw attempt interface for the recent history list
+interface RawAttempt {
   id: string;
   topic_name: string;
   score: number;
@@ -23,19 +27,13 @@ interface QuizAttempt {
   created_at: string;
 }
 
-interface SubjectStat {
-  subject: string;
-  percentage: number;
-  attempts: number;
-}
-
 export default function AnalyticsScreen() {
   const router = useRouter();
   const { user } = useUser();
 
   const [loading, setLoading] = useState(true);
-  const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
-  const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
+  const [attempts, setAttempts] = useState<RawAttempt[]>([]);
+  const [subjectStats, setSubjectStats] = useState<SubjectMastery[]>([]);
   const [overallAvg, setOverallAvg] = useState(0);
 
   useEffect(() => {
@@ -47,37 +45,20 @@ export default function AnalyticsScreen() {
   const fetchAnalytics = async () => {
     setLoading(true);
     try {
-      // Query both tables concurrently to capture records regardless of table naming
-      const [attemptsRes, resultsRes] = await Promise.all([
-        supabase
-          .from('quiz_attempts')
-          .select('*')
-          .eq('user_id', user?.id)
-          .order('created_at', { ascending: false }),
-        supabase
-          .from('quiz_results')
-          .select('*')
-          .eq('user_id', user?.id)
-          .order('created_at', { ascending: false }),
-      ]);
+      const masteryData = await getUserMastery(user?.id || '');
 
-      // Combine results from both tables
-      const combinedData = [
-        ...(attemptsRes.data || []),
-        ...(resultsRes.data || []),
-      ];
+      setSubjectStats(masteryData.subjectMastery);
+      setAttempts(masteryData.allAttempts as any[]); // Using raw attempts for timeline
 
-      // Sort combined records by date descending
-      combinedData.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-
-      if (combinedData.length > 0) {
-        setAttempts(combinedData as QuizAttempt[]);
-        processStats(combinedData as QuizAttempt[]);
+      if (masteryData.subjectMastery.length > 0) {
+        let sum = 0;
+        let count = 0;
+        masteryData.subjectMastery.forEach(s => {
+          sum += s.averageMastery;
+          count++;
+        });
+        setOverallAvg(Math.round(sum / count));
       } else {
-        setAttempts([]);
-        setSubjectStats([]);
         setOverallAvg(0);
       }
     } catch (err) {
@@ -85,38 +66,6 @@ export default function AnalyticsScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const processStats = (data: QuizAttempt[]) => {
-    let totalScore = 0;
-    let totalPossible = 0;
-    const aggregated: Record<string, { score: number; possible: number; attempts: number }> = {};
-
-    data.forEach((item) => {
-      totalScore += item.score;
-      totalPossible += item.total_questions;
-      
-      const sub = item.subject || 'Mathematics'; // Fallback for old records
-
-      if (!aggregated[sub]) {
-        aggregated[sub] = { score: 0, possible: 0, attempts: 0 };
-      }
-      aggregated[sub].score += item.score;
-      aggregated[sub].possible += item.total_questions;
-      aggregated[sub].attempts += 1;
-    });
-
-    setOverallAvg(Math.round((totalScore / totalPossible) * 100) || 0);
-
-    const statsArray = Object.keys(aggregated).map((subject) => ({
-      subject,
-      percentage: Math.round((aggregated[subject].score / aggregated[subject].possible) * 100),
-      attempts: aggregated[subject].attempts,
-    }));
-
-    // Sort by highest percentage first
-    statsArray.sort((a, b) => b.percentage - a.percentage);
-    setSubjectStats(statsArray);
   };
 
   const getProgressColor = (percentage: number) => {
@@ -187,9 +136,9 @@ export default function AnalyticsScreen() {
               <View key={stat.subject} style={[styles.topicStatRow, index === subjectStats.length - 1 && { borderBottomWidth: 0, paddingBottom: 0 }]}>
                 <View style={styles.topicStatHeader}>
                   <Text style={styles.topicStatName}>{stat.subject}</Text>
-                  <Text style={styles.topicStatScore}>{stat.percentage}%</Text>
+                  <Text style={styles.topicStatScore}>{stat.averageMastery}%</Text>
                 </View>
-                <Text style={styles.topicAttempts}>{stat.attempts} attempt{stat.attempts !== 1 ? 's' : ''}</Text>
+                <Text style={styles.topicAttempts}>{stat.totalAttempts} attempt{stat.totalAttempts !== 1 ? 's' : ''}</Text>
 
                 {/* Custom Progress Bar */}
                 <View style={styles.progressBarBg}>
@@ -197,8 +146,8 @@ export default function AnalyticsScreen() {
                     style={[
                       styles.progressBarFill,
                       {
-                        width: `${stat.percentage}%`,
-                        backgroundColor: getProgressColor(stat.percentage)
+                        width: `${stat.averageMastery}%`,
+                        backgroundColor: getProgressColor(stat.averageMastery)
                       }
                     ]}
                   />
@@ -206,6 +155,24 @@ export default function AnalyticsScreen() {
               </View>
             ))}
           </View>
+          
+          {/* Weak Topics */}
+          {subjectStats.some(s => s.weakTopics.length > 0) && (
+            <>
+              <Text style={[styles.sectionTitle, { marginTop: SPACING.xl }]}>Needs Practice</Text>
+              <View style={styles.breakdownCard}>
+                {subjectStats.flatMap(s => s.weakTopics).sort((a,b) => a.masteryScore - b.masteryScore).slice(0, 5).map((topic, index, arr) => (
+                  <View key={topic.topic_name} style={[styles.topicStatRow, index === arr.length - 1 && { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                    <View style={styles.topicStatHeader}>
+                      <Text style={styles.topicStatName}>{topic.topic_name}</Text>
+                      <Text style={[styles.topicStatScore, { color: COLORS.red }]}>{topic.masteryScore}%</Text>
+                    </View>
+                    <Text style={styles.topicAttempts}>{topic.state.replace('_', ' ')}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
 
           {/* Recent History List */}
           <Text style={[styles.sectionTitle, { marginTop: SPACING.xl }]}>Recent Attempts</Text>

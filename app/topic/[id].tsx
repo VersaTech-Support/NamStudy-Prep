@@ -12,6 +12,11 @@ import LoadingState from '@/components/ui/LoadingState';
 import EmptyState from '@/components/ui/EmptyState';
 import GradientCard from '@/components/ui/GradientCard';
 import ProgressBar from '@/components/ui/ProgressBar';
+import RecommendationCard from '@/components/ui/RecommendationCard';
+
+import { getUserMastery } from '@/lib/learning/mastery';
+import { getNextBestActions } from '@/lib/learning/recommendations';
+import { TopicMastery, StudyRecommendation } from '@/lib/learning/types';
 
 interface Topic {
   id: string;
@@ -49,7 +54,8 @@ export default function TopicHubScreen() {
   
   const [flashcardCount, setFlashcardCount] = useState(0);
   const [quizCount, setQuizCount] = useState(0);
-  const [mastery, setMastery] = useState<number | null>(null);
+  const [topicMastery, setTopicMastery] = useState<TopicMastery | null>(null);
+  const [recommendation, setRecommendation] = useState<StudyRecommendation | null>(null);
 
   useEffect(() => {
     fetchTopicData();
@@ -112,29 +118,26 @@ export default function TopicHubScreen() {
         .eq('topic_id', id);
       setQuizCount(qCount || 0);
 
-      // 6. Calculate Mastery from quiz_results (CURRENT TOPIC MASTERY = MOST RECENT COMPLETED QUIZ ATTEMPT FOR THIS USER + TOPIC)
+      // 6. Calculate Mastery using central intelligence service
       if (tData && user) {
-        let rQuery = supabase
-          .from('quiz_results')
-          .select('score, total_questions')
-          .eq('user_id', user.id)
-          .order('created_at', { ascending: false })
-          .limit(1);
-          
-        // Use topic_id if possible, fallback to topic_name string match
-        if (tData.id) {
-            rQuery = rQuery.or(`topic_id.eq.${tData.id},topic_name.eq.${tData.name}`);
-        } else {
-            rQuery = rQuery.eq('topic_name', tData.name);
+        const masteryData = await getUserMastery(user.id);
+        const thisTopicMastery = masteryData.topicMastery.find(t => t.topic_id === id);
+        if (thisTopicMastery) {
+          setTopicMastery(thisTopicMastery);
         }
 
-        const { data: rData } = await rQuery;
-          
-        if (rData && rData.length > 0) {
-          const recent = rData[0];
-          if (recent.total_questions > 0) {
-            setMastery(Math.round((recent.score / recent.total_questions) * 100));
-          }
+        // Calculate next best action specifically contexted for this topic (if any)
+        // We can use the global engine, and if the primary recommendation isn't this topic, we could force it, 
+        // but for now we just get the top recommendation. If it's a weak topic, it'll naturally bubble up.
+        const nextActions = getNextBestActions({
+          topicMastery: thisTopicMastery ? [thisTopicMastery] : [], 
+          subjectMastery: masteryData.subjectMastery,
+          userSubjects: user.subjects || ['Mathematics'],
+          isPro: true, // simplified for context
+        });
+
+        if (nextActions.length > 0) {
+          setRecommendation(nextActions[0]);
         }
       }
 
@@ -176,16 +179,27 @@ export default function TopicHubScreen() {
         {/* Overview & Mastery */}
         <View style={styles.masteryContainer}>
           <Text style={styles.sectionTitle}>Your Progress</Text>
-          {mastery !== null ? (
+          {topicMastery !== null ? (
           <View>
             <ProgressBar 
-              progress={mastery / 100} 
+              progress={topicMastery.masteryScore / 100} 
               height={12} 
-              color={mastery >= 70 ? COLORS.green : mastery >= 50 ? COLORS.gold : COLORS.red} 
+              color={topicMastery.masteryScore >= 70 ? COLORS.green : topicMastery.masteryScore >= 50 ? COLORS.gold : COLORS.red} 
             />
-            <Text style={{ ...FONTS.small, color: COLORS.textSecondary, marginTop: 4 }}>
-              {mastery}% Mastered
-            </Text>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
+              <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>
+                {topicMastery.masteryScore}% Mastered
+              </Text>
+              <Text style={{ ...FONTS.small, color: COLORS.textMuted }}>
+                {topicMastery.attempts} attempt{topicMastery.attempts !== 1 ? 's' : ''} 
+                {topicMastery.trend !== 'INSUFFICIENT_DATA' && ` • ${topicMastery.trend.toLowerCase()}`}
+              </Text>
+            </View>
+            {topicMastery.isLowConfidence && (
+              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginTop: 4 }}>
+                Limited practice data available.
+              </Text>
+            )}
           </View>
           ) : (
             <Text style={styles.noMasteryText}>
@@ -197,6 +211,27 @@ export default function TopicHubScreen() {
         {topic.description ? (
           <Text style={styles.description}>{topic.description}</Text>
         ) : null}
+
+        {/* Recommended Next Action */}
+        {recommendation && (
+          <View style={{ marginBottom: SPACING.lg }}>
+            <SectionHeader title="Recommended Next" />
+            <RecommendationCard 
+              recommendation={recommendation}
+              onPress={() => {
+                if (recommendation.type === 'topic_quiz' || recommendation.type === 'continue') {
+                  router.push(`/quiz/${encodeURIComponent(topic.name)}?topic_id=${topic.id}&subject=${encodeURIComponent(subject.name)}`);
+                } else if (recommendation.type === 'flashcards') {
+                  router.push(`/flashcards?topic_id=${topic.id}&topic_name=${encodeURIComponent(topic.name)}`);
+                } else if (recommendation.type === 'past_paper') {
+                  router.push(`/papers?subject=${encodeURIComponent(subject.name)}`);
+                } else if (recommendation.type === 'review_topic') {
+                  // Already here
+                }
+              }}
+            />
+          </View>
+        )}
 
         {/* Study Actions */}
         <SectionHeader title="Study Tools" />

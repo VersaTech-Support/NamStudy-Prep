@@ -24,22 +24,10 @@ import GradientCard from '@/components/ui/GradientCard';
 import PremiumBadge from '@/components/ui/PremiumBadge';
 import AuthModal from '@/components/AuthModal';
 
-interface QuizAttempt {
-  id: string;
-  topic_name: string;
-  topic_id?: string;
-  score: number;
-  total_questions: number;
-  subject?: string;
-  created_at: string;
-  grade_level?: string;
-}
-
-interface SubjectStat {
-  subject: string;
-  percentage: number;
-  attempts: number;
-}
+import { getUserMastery } from '@/lib/learning/mastery';
+import { getNextBestActions } from '@/lib/learning/recommendations';
+import { SubjectMastery, StudyRecommendation, TopicMastery } from '@/lib/learning/types';
+import RecommendationCard from '@/components/ui/RecommendationCard';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { FEATURES } from '@/constants/features';
@@ -55,9 +43,9 @@ export default function HomeScreen() {
   const [counts, setCounts] = useState({ papers: 0, quizzes: 0, students: 0, teachers: 0 });
 
   // Personalized Data (Authenticated)
-  const [recentAttempt, setRecentAttempt] = useState<QuizAttempt | null>(null);
-  const [weakTopics, setWeakTopics] = useState<QuizAttempt[]>([]);
-  const [subjectStats, setSubjectStats] = useState<SubjectStat[]>([]);
+  const [recommendations, setRecommendations] = useState<StudyRecommendation[]>([]);
+  const [subjectStats, setSubjectStats] = useState<SubjectMastery[]>([]);
+  const [recentTopic, setRecentTopic] = useState<TopicMastery | null>(null);
 
   // Exam Countdown (Assume Nov 1st of current year)
   const daysToExam = React.useMemo(() => {
@@ -99,62 +87,23 @@ export default function HomeScreen() {
   const fetchAuthenticatedData = async () => {
     setLoading(true);
     try {
-      const [attemptsRes, resultsRes] = await Promise.all([
-        supabase.from('quiz_attempts').select('*').eq('user_id', user?.id),
-        supabase.from('quiz_results').select('*').eq('user_id', user?.id)
-      ]);
+      const masteryData = await getUserMastery(user?.id || '');
+      
+      setSubjectStats(masteryData.subjectMastery);
+      setRecentTopic(masteryData.topicMastery.length > 0 ? masteryData.topicMastery[0] : null);
 
-      const combinedData = [
-        ...(attemptsRes.data || []),
-        ...(resultsRes.data || []),
-      ] as QuizAttempt[];
+      const nextActions = getNextBestActions({
+        topicMastery: masteryData.topicMastery,
+        subjectMastery: masteryData.subjectMastery,
+        userSubjects: user?.subjects || ['Mathematics'],
+        daysUntilExam: daysToExam,
+        isPro: isPro,
+      });
 
-      combinedData.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      if (combinedData.length > 0) {
-        setRecentAttempt(combinedData[0]);
-
-        // Process Subject Stats
-        const aggregated: Record<string, { score: number; possible: number; attempts: number }> = {};
-        const topicScores: Record<string, { score: number; possible: number; latest: QuizAttempt }> = {};
-
-        combinedData.forEach((item) => {
-          const sub = item.subject || 'Mathematics';
-          if (!aggregated[sub]) aggregated[sub] = { score: 0, possible: 0, attempts: 0 };
-          aggregated[sub].score += item.score;
-          aggregated[sub].possible += item.total_questions;
-          aggregated[sub].attempts += 1;
-
-          if (!topicScores[item.topic_name]) {
-            topicScores[item.topic_name] = { score: 0, possible: 0, latest: item };
-          }
-          topicScores[item.topic_name].score += item.score;
-          topicScores[item.topic_name].possible += item.total_questions;
-        });
-
-        const statsArray = Object.keys(aggregated).map((subject) => ({
-          subject,
-          percentage: Math.round((aggregated[subject].score / aggregated[subject].possible) * 100),
-          attempts: aggregated[subject].attempts,
-        })).sort((a, b) => b.percentage - a.percentage);
-        setSubjectStats(statsArray);
-
-        // Find weak topics (less than 70% average)
-        const weak = Object.values(topicScores)
-          .map(t => ({
-            ...t.latest,
-            avgPercentage: (t.score / t.possible) * 100
-          }))
-          .filter(t => t.avgPercentage < 70)
-          .sort((a, b) => a.avgPercentage - b.avgPercentage)
-          .slice(0, 3);
-        setWeakTopics(weak);
-      } else {
-        setRecentAttempt(null);
-        setSubjectStats([]);
-        setWeakTopics([]);
-      }
-    } catch (err) {}
+      setRecommendations(nextActions);
+    } catch (err) {
+      console.error('Failed to fetch authenticated data:', err);
+    }
     setLoading(false);
   };
 
@@ -210,13 +159,13 @@ export default function HomeScreen() {
 
         <View style={styles.section}>
           <SectionHeader title="Continue Studying" />
-          {recentAttempt ? (
-            <GradientCard gradient={GRADIENTS.primary} onPress={() => recentAttempt.topic_id ? router.push(`/topic/${recentAttempt.topic_id}` as any) : router.push({ pathname: '/quiz/[topic]', params: { topic: recentAttempt.topic_name, gradeLevel: recentAttempt.grade_level || 'NSSCO' } } as any)}>
+          {recentTopic ? (
+            <GradientCard gradient={GRADIENTS.primary} onPress={() => recentTopic.topic_id ? router.push(`/topic/${recentTopic.topic_id}`) : router.push({ pathname: '/quiz/[topic]', params: { topic: recentTopic.topic_name, gradeLevel: user?.grade_level || 'NSSCO' } })}>
                <View style={{ flexDirection: 'row', alignItems: 'center' }}>
                  <View style={{ flex: 1 }}>
                    <Text style={{ ...FONTS.caption, color: COLORS.white, opacity: 0.8 }}>Latest Activity</Text>
-                   <Text style={{ ...FONTS.h3, color: COLORS.white, marginVertical: 4 }}>{recentAttempt.topic_name}</Text>
-                   <Text style={{ ...FONTS.small, color: COLORS.white, opacity: 0.8 }}>Score: {recentAttempt.score}/{recentAttempt.total_questions}</Text>
+                   <Text style={{ ...FONTS.h3, color: COLORS.white, marginVertical: 4 }}>{recentTopic.topic_name}</Text>
+                   <Text style={{ ...FONTS.small, color: COLORS.white, opacity: 0.8 }}>Recent Mastery: {recentTopic.masteryScore}%</Text>
                  </View>
                  <Ionicons name="play-circle" size={40} color={COLORS.white} />
                </View>
@@ -234,27 +183,27 @@ export default function HomeScreen() {
         </View>
 
         <View style={styles.section}>
-          <SectionHeader title="Recommended for You" subtitle="Focus on areas that need improvement" />
-          {weakTopics.length > 0 ? (
-            weakTopics.map((topic, i) => (
-              <TouchableOpacity key={i} style={styles.recommendedCard} onPress={() => topic.topic_id ? router.push(`/topic/${topic.topic_id}` as any) : router.push({ pathname: '/quiz/[topic]', params: { topic: topic.topic_name, gradeLevel: topic.grade_level || 'NSSCO' } } as any)}>
-                <View style={styles.recommendedIcon}>
-                  <Ionicons name="trending-up" size={20} color={COLORS.accent} />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.recommendedTitle}>{topic.topic_name}</Text>
-                  <Text style={styles.recommendedSub}>Needs Review</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
-              </TouchableOpacity>
+          <SectionHeader title="Recommended for You" subtitle="Personalized study actions based on your progress" />
+          {recommendations.length > 0 ? (
+            recommendations.map((rec, i) => (
+              <RecommendationCard 
+                key={i} 
+                recommendation={rec} 
+                onPress={() => {
+                  if (rec.type === 'topic_quiz' || rec.type === 'continue') {
+                    if (rec.topicId) router.push(`/topic/${rec.topicId}`);
+                    else router.push({ pathname: '/quiz/[topic]', params: { topic: rec.topicName || 'Unknown', gradeLevel: rec.gradeLevel || user?.grade_level || 'NSSCO' } });
+                  } else if (rec.type === 'review_topic') {
+                    if (rec.topicId) router.push(`/topic/${rec.topicId}`);
+                    else router.push('/quizzes');
+                  } else if (rec.type === 'past_paper') {
+                    router.push('/papers');
+                  } else if (rec.type === 'flashcards') {
+                    router.push('/flashcards');
+                  }
+                }}
+              />
             ))
-          ) : recentAttempt ? (
-            <EmptyState 
-              icon="trophy-outline"
-              title="You're crushing it!" 
-              description="No weak topics identified yet. Keep up the good work."
-              style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
-            />
           ) : (
              <EmptyState 
               icon="analytics-outline"
@@ -273,9 +222,9 @@ export default function HomeScreen() {
                  <View key={stat.subject} style={[styles.progressItem, i !== Math.min(2, subjectStats.length - 1) && styles.progressItemBorder]}>
                     <View style={styles.progressHeader}>
                       <Text style={styles.progressSubject}>{stat.subject}</Text>
-                      <Text style={[styles.progressPercentage, { color: getProgressColor(stat.percentage) }]}>{stat.percentage}%</Text>
+                      <Text style={[styles.progressPercentage, { color: getProgressColor(stat.averageMastery) }]}>{stat.averageMastery}%</Text>
                     </View>
-                    <ProgressBar progress={stat.percentage / 100} color={getProgressColor(stat.percentage)} />
+                    <ProgressBar progress={stat.averageMastery / 100} color={getProgressColor(stat.averageMastery)} />
                  </View>
                ))}
             </View>
