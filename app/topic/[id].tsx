@@ -236,6 +236,21 @@ export default function TopicHubScreen() {
         {/* Study Actions */}
         <SectionHeader title="Study Tools" />
         <View style={styles.actionGrid}>
+          
+          <TouchableOpacity 
+            style={[styles.actionCard, { width: '100%', marginBottom: SPACING.md, flexDirection: 'row', alignItems: 'center' }]} 
+            onPress={() => router.push(`/topic/${topic.id}/notes`)}
+          >
+            <View style={[styles.iconBox, { backgroundColor: COLORS.primaryLight, marginRight: SPACING.md }]}>
+              <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.actionTitle}>Revision Notes</Text>
+              <Text style={styles.actionSubtitle}>Read comprehensive study notes</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+          </TouchableOpacity>
+
           <TouchableOpacity 
             style={styles.actionCard} 
             onPress={() => router.push(`/flashcards?topic_id=${topic.id}&topic_name=${encodeURIComponent(topic.name)}`)}

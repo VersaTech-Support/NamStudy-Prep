@@ -604,6 +604,190 @@ export type Database = {
         }
         Relationships: []
       }
+      student_content_progress: {
+        Row: {
+          completed_at: string | null
+          content_block_id: string
+          created_at: string | null
+          id: string
+          last_seen_at: string | null
+          last_viewed_at: string | null
+          progress_percent: number
+          started_at: string | null
+          topic_id: string
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          content_block_id: string
+          created_at?: string | null
+          id?: string
+          last_seen_at?: string | null
+          last_viewed_at?: string | null
+          progress_percent?: number
+          started_at?: string | null
+          topic_id: string
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          content_block_id?: string
+          created_at?: string | null
+          id?: string
+          last_seen_at?: string | null
+          last_viewed_at?: string | null
+          progress_percent?: number
+          started_at?: string | null
+          topic_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_content_progress_content_block_id_fkey"
+            columns: ["content_block_id"]
+            isOneToOne: false
+            referencedRelation: "topic_content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_content_progress_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_subjects: {
+        Row: {
+          created_at: string | null
+          curriculum_subject_id: string
+          exam_date: string | null
+          id: string
+          is_active: boolean | null
+          target_grade: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          curriculum_subject_id: string
+          exam_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          target_grade?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          curriculum_subject_id?: string
+          exam_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          target_grade?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_subjects_curriculum_subject_id_fkey"
+            columns: ["curriculum_subject_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_topic_confidence: {
+        Row: {
+          confidence: string
+          created_at: string | null
+          id: string
+          topic_id: string
+          user_id: string
+        }
+        Insert: {
+          confidence: string
+          created_at?: string | null
+          id?: string
+          topic_id: string
+          user_id: string
+        }
+        Update: {
+          confidence?: string
+          created_at?: string | null
+          id?: string
+          topic_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_topic_confidence_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      student_topic_progress: {
+        Row: {
+          completed_at: string | null
+          completion_percent: number | null
+          created_at: string | null
+          id: string
+          last_accessed_at: string | null
+          last_content_block_id: string | null
+          started_at: string | null
+          time_spent_seconds: number | null
+          topic_id: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          completed_at?: string | null
+          completion_percent?: number | null
+          created_at?: string | null
+          id?: string
+          last_accessed_at?: string | null
+          last_content_block_id?: string | null
+          started_at?: string | null
+          time_spent_seconds?: number | null
+          topic_id: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          completed_at?: string | null
+          completion_percent?: number | null
+          created_at?: string | null
+          id?: string
+          last_accessed_at?: string | null
+          last_content_block_id?: string | null
+          started_at?: string | null
+          time_spent_seconds?: number | null
+          topic_id?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "student_topic_progress_last_content_block_id_fkey"
+            columns: ["last_content_block_id"]
+            isOneToOne: false
+            referencedRelation: "topic_content"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "student_topic_progress_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subjects: {
         Row: {
           name: string
@@ -615,6 +799,91 @@ export type Database = {
           name?: string
         }
         Relationships: []
+      }
+      topic_content: {
+        Row: {
+          block_type: string
+          content: Json
+          created_at: string | null
+          id: string
+          is_published: boolean | null
+          is_required: boolean | null
+          sequence_order: number
+          topic_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          block_type: string
+          content?: Json
+          created_at?: string | null
+          id?: string
+          is_published?: boolean | null
+          is_required?: boolean | null
+          sequence_order?: number
+          topic_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          block_type?: string
+          content?: Json
+          created_at?: string | null
+          id?: string
+          is_published?: boolean | null
+          is_required?: boolean | null
+          sequence_order?: number
+          topic_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_content_topic_id_fkey"
+            columns: ["topic_id"]
+            isOneToOne: false
+            referencedRelation: "topics"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      topic_sections: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sequence_order: number | null
+          subject_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sequence_order?: number | null
+          subject_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sequence_order?: number | null
+          subject_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_sections_subject_id_fkey"
+            columns: ["subject_id"]
+            isOneToOne: false
+            referencedRelation: "curriculum_subjects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       topics: {
         Row: {
@@ -666,6 +935,13 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "topics_section_id_fkey"
+            columns: ["section_id"]
+            isOneToOne: false
+            referencedRelation: "topic_sections"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "topics_subject_id_fkey"
             columns: ["subject_id"]
@@ -791,228 +1067,6 @@ export type Database = {
             referencedRelation: "schools"
             referencedColumns: ["id"]
           },
-        ]
-      }
-      student_content_progress: {
-        Row: {
-          completed_at: string | null
-          content_block_id: string
-          created_at: string | null
-          id: string
-          last_seen_at: string | null
-          started_at: string | null
-          topic_id: string
-          user_id: string
-        }
-        Insert: {
-          completed_at?: string | null
-          content_block_id: string
-          created_at?: string | null
-          id?: string
-          last_seen_at?: string | null
-          started_at?: string | null
-          topic_id: string
-          user_id: string
-        }
-        Update: {
-          completed_at?: string | null
-          content_block_id?: string
-          created_at?: string | null
-          id?: string
-          last_seen_at?: string | null
-          started_at?: string | null
-          topic_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "student_content_progress_content_block_id_fkey"
-            columns: ["content_block_id"]
-            isOneToOne: false
-            referencedRelation: "topic_content"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "student_content_progress_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "topics"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      student_topic_confidence: {
-        Row: {
-          confidence: "need_help" | "still_learning" | "almost_there" | "confident"
-          created_at: string | null
-          id: string
-          topic_id: string
-          user_id: string
-        }
-        Insert: {
-          confidence: "need_help" | "still_learning" | "almost_there" | "confident"
-          created_at?: string | null
-          id?: string
-          topic_id: string
-          user_id: string
-        }
-        Update: {
-          confidence?: "need_help" | "still_learning" | "almost_there" | "confident"
-          created_at?: string | null
-          id?: string
-          topic_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "student_topic_confidence_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "topics"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      student_topic_progress: {
-        Row: {
-          completed_at: string | null
-          completion_percent: number | null
-          created_at: string | null
-          id: string
-          last_accessed_at: string | null
-          last_content_block_id: string | null
-          started_at: string | null
-          time_spent_seconds: number | null
-          topic_id: string
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          completed_at?: string | null
-          completion_percent?: number | null
-          created_at?: string | null
-          id?: string
-          last_accessed_at?: string | null
-          last_content_block_id?: string | null
-          started_at?: string | null
-          time_spent_seconds?: number | null
-          topic_id: string
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          completed_at?: string | null
-          completion_percent?: number | null
-          created_at?: string | null
-          id?: string
-          last_accessed_at?: string | null
-          last_content_block_id?: string | null
-          started_at?: string | null
-          time_spent_seconds?: number | null
-          topic_id?: string
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "student_topic_progress_last_content_block_id_fkey"
-            columns: ["last_content_block_id"]
-            isOneToOne: false
-            referencedRelation: "topic_content"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "student_topic_progress_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "topics"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      topic_content: {
-        Row: {
-          block_type: "heading" | "paragraph" | "rich_text" | "formula" | "image" | "callout" | "key_term" | "bullet_list" | "numbered_list" | "table" | "example" | "summary" | "video" | "divider" | "warning" | "attachment"
-          content: Json
-          created_at: string | null
-          id: string
-          is_published: boolean | null
-          is_required: boolean | null
-          sequence_order: number
-          topic_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          block_type: "heading" | "paragraph" | "rich_text" | "formula" | "image" | "callout" | "key_term" | "bullet_list" | "numbered_list" | "table" | "example" | "summary" | "video" | "divider" | "warning" | "attachment"
-          content?: Json
-          created_at?: string | null
-          id?: string
-          is_published?: boolean | null
-          is_required?: boolean | null
-          sequence_order?: number
-          topic_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          block_type?: "heading" | "paragraph" | "rich_text" | "formula" | "image" | "callout" | "key_term" | "bullet_list" | "numbered_list" | "table" | "example" | "summary" | "video" | "divider" | "warning" | "attachment"
-          content?: Json
-          created_at?: string | null
-          id?: string
-          is_published?: boolean | null
-          is_required?: boolean | null
-          sequence_order?: number
-          topic_id?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "topic_content_topic_id_fkey"
-            columns: ["topic_id"]
-            isOneToOne: false
-            referencedRelation: "topics"
-            referencedColumns: ["id"]
-          }
-        ]
-      }
-      topic_sections: {
-        Row: {
-          created_at: string | null
-          description: string | null
-          id: string
-          is_active: boolean | null
-          name: string
-          sequence_order: number | null
-          subject_id: string
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          name: string
-          sequence_order?: number | null
-          subject_id: string
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          name?: string
-          sequence_order?: number | null
-          subject_id?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "topic_sections_subject_id_fkey"
-            columns: ["subject_id"]
-            isOneToOne: false
-            referencedRelation: "curriculum_subjects"
-            referencedColumns: ["id"]
-          }
         ]
       }
     }
