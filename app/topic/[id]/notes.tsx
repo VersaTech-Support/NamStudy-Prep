@@ -111,7 +111,6 @@ export default function StudentNotesReader() {
           user_id: user.id,
           topic_id: id,
           progress_percent: 0,
-          content_block_id: 'initial',
           started_at: new Date().toISOString()
         });
     }

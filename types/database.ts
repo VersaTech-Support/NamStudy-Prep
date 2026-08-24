@@ -607,7 +607,7 @@ export type Database = {
       student_content_progress: {
         Row: {
           completed_at: string | null
-          content_block_id: string
+          content_block_id: string | null
           created_at: string | null
           id: string
           last_seen_at: string | null
@@ -619,7 +619,7 @@ export type Database = {
         }
         Insert: {
           completed_at?: string | null
-          content_block_id: string
+          content_block_id?: string | null
           created_at?: string | null
           id?: string
           last_seen_at?: string | null
@@ -631,7 +631,7 @@ export type Database = {
         }
         Update: {
           completed_at?: string | null
-          content_block_id?: string
+          content_block_id?: string | null
           created_at?: string | null
           id?: string
           last_seen_at?: string | null
