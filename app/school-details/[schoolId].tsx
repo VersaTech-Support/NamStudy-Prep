@@ -32,31 +32,31 @@ interface SchoolUser {
   name: string;
   email: string;
   grade_level: string;
-  role?: string;
-  is_admin: boolean;
-  is_school_admin?: boolean;
-  subscription_status: string;
-  subjects?: string[];
+  role?: string | null;
+  is_admin: boolean | null;
+  is_school_admin?: boolean | null;
+  subscription_status: string | null;
+  subjects?: string[] | null;
 }
 
 interface Announcement {
   id: string;
   title: string;
   content: string;
-  is_urgent: boolean;
+  is_urgent: boolean | null;
   author_id: string | null;
-  created_at: string;
+  created_at: string | null;
 }
 
 interface TimetableEntry {
   id: string;
   curriculum: string | null;
-  subject_name: string;
-  paper_code: string;
-  exam_date: string;
-  start_time: string;
-  duration: string;
-  venue: string;
+  subject_name: string | null;
+  paper_code: string | null;
+  exam_date: string | null;
+  start_time: string | null;
+  duration: string | null;
+  venue: string | null;
 }
 
 type TabName = 'overview' | 'learners' | 'teachers' | 'content';
@@ -105,10 +105,10 @@ export default function SchoolDetailsScreen() {
         return;
       }
 
-      setSchool(schoolRes.data);
-      setSchoolUsers(usersRes.data || []);
-      setAnnouncements(announcementsRes.data || []);
-      setTimetables(timetablesRes.data || []);
+      setSchool(schoolRes.data as any as SchoolRecord);
+      setSchoolUsers((usersRes.data as any as SchoolUser[]) || []);
+      setAnnouncements((announcementsRes.data as any as Announcement[]) || []);
+      setTimetables((timetablesRes.data as any as TimetableEntry[]) || []);
     } catch (err) {
       console.error('School details fetch error:', err);
       setError('An unexpected error occurred.');
@@ -475,7 +475,7 @@ export default function SchoolDetailsScreen() {
                       </View>
                       <Text style={styles.contentTitle}>{ann.title}</Text>
                       <Text style={styles.contentBody} numberOfLines={4}>{ann.content}</Text>
-                      <Text style={styles.contentDate}>{formatDate(ann.created_at)}</Text>
+                      <Text style={styles.contentDate}>{formatDate(ann.created_at || '')}</Text>
                     </View>
                   ))
                 )}
@@ -493,7 +493,7 @@ export default function SchoolDetailsScreen() {
                   </View>
                 ) : (
                   timetables.map(exam => {
-                    const examDate = new Date(exam.exam_date);
+                    const examDate = new Date(exam.exam_date || '');
                     const isPast = examDate < new Date();
                     return (
                       <View key={exam.id} style={[styles.timetableCard, isPast && { opacity: 0.5 }]}>

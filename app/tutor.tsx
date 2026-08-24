@@ -51,7 +51,7 @@ export default function TutorScreen() {
       const { data, error } = await supabase
         .from('ai_messages')
         .select('*')
-        .eq('user_id', user?.id)
+        .eq('user_id', user?.id || '')
         .order('created_at', { ascending: true });
 
       if (data && !error) {
@@ -119,7 +119,7 @@ export default function TutorScreen() {
     }
 
     const aiMsg = {
-      user_id: user?.id,
+      user_id: user?.id || '',
       role: 'assistant',
       content: replyContent,
     };

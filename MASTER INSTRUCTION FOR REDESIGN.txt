@@ -1,0 +1,1886 @@
+
+Sections must be configurable by an administrator.
+
+Do NOT hard-code "Theory", "Practical", "Pure 1", etc.
+
+---
+
+# 4. SUBJECT LIBRARY REDESIGN
+
+Redesign the learner's subject browsing experience.
+
+Instead of presenting all papers/resources together, the learner should first select a subject.
+
+Example:
+
+PAST PAPERS
+
+Search
+
+[ Biology ]
+NSSCAS
+42 papers
+→
+
+[ Mathematics ]
+NSSCAS
+58 papers
+→
+
+[ Computer Science ]
+NSSCAS
+31 papers
+→
+
+The same subject-first principle should apply to Notes.
+
+NOTES
+
+Search subjects
+
+[ Biology ]
+[ Chemistry ]
+[ Physics ]
+[ Mathematics ]
+[ Computer Science ]
+
+Each subject card should support:
+
+- subject icon
+- subject colour/accent
+- curriculum
+- grade
+- progress
+- number of topics
+- number of completed topics
+- optional "Continue" state
+
+The current NamStudy brand colours must remain the primary brand identity.
+
+Use subject accents only as secondary visual identifiers.
+
+---
+
+# 5. SUBJECT OVERVIEW SCREEN
+
+Create/rework the subject overview screen to resemble the structure observed in the reference video.
+
+Header:
+
+< Back
+
+[Subject Icon]
+
+BIOLOGY
+
+NSSCAS
+Grade 12
+
+Then a prominent progress card:
+
+MY PROGRESS                         68%
+
+██████████████░░░░
+
+Topics completed: 17 / 25
+
+Target Grade: A
+Exam Date: Oct/Nov 2026
+
+The progress card should use the NamStudy gradient/theme.
+
+Do NOT hard-code progress.
+
+Calculate it from actual student activity.
+
+Below the progress card:
+
+Recommended next topic
+
+[ Cell Biology ]
+Continue studying →
+
+Then configurable sections:
+
+THEORY                         v
+
+[ Cell Biology ]              >
+[ Biological Molecules ]       >
+[ Enzymes ]                    >
+
+PRACTICAL                      v
+
+[ Experimental Skills ]        >
+[ Investigations ]              >
+
+PAST PAPERS                    >
+
+QUIZZES                        >
+
+FLASHCARDS                     >
+
+NAMTUTOR                       >
+
+Sections should be expandable/collapsible.
+
+Remember the video specifically uses collapsible subject sections.
+
+---
+
+# 6. PAST PAPERS REDESIGN
+
+This is a major requirement.
+
+The current application has a paper library which filters/group papers, but the learner experience is still effectively one large paper library.
+
+Change this.
+
+The learner should navigate:
+
+Past Papers
+    ↓
+Select Subject
+    ↓
+Subject Paper Hub
+    ↓
+Year
+    ↓
+Paper
+
+Example:
+
+PAST PAPERS
+
+[ Biology ]
+[ Mathematics ]
+[ Computer Science ]
+
+Tap Biology:
+
+BIOLOGY
+
+NSSCAS
+Grade 12
+
+2025
+    Paper 1
+    Paper 2
+    Paper 3
+
+2024
+    Paper 1
+    Paper 2
+    Paper 3
+
+2023
+    Paper 1
+    Paper 2
+    Paper 3
+
+Each paper card should be compact.
+
+Do NOT put the full current heavy paper card everywhere.
+
+The paper detail screen can contain:
+
+- Paper title
+- Year
+- Paper number
+- Description
+- View paper
+- Download
+- View solution
+- Bookmark
+- Start related quiz if available
+
+The subject page can optionally have:
+
+PAST PAPER WALKTHROUGH
+
+as shown in the reference app.
+
+Do not remove existing paper functionality.
+
+Refactor the navigation and presentation around it.
+
+---
+
+# 7. TOPICS MUST BECOME REAL LEARNING UNITS
+
+The existing `topics` table is already present.
+
+Extend it rather than replacing it.
+
+A topic should have:
+
+- id
+- subject_id
+- name
+- code
+- description
+- sequence_order
+- is_active
+- optional estimated_minutes
+- optional difficulty
+- optional icon
+- optional accent
+- created_at
+- updated_at
+
+The administrator must be able to:
+
+CREATE
+EDIT
+REORDER
+ACTIVATE/DEACTIVATE
+DELETE
+
+topics.
+
+Topics must remain associated with their subject.
+
+---
+
+# 8. ADMIN CURRICULUM MANAGEMENT
+
+The current AdminDashboard already manages several content types and has subject-related functionality.
+
+Extend the admin experience into a dedicated:
+
+CONTENT / CURRICULUM MANAGEMENT
+
+area.
+
+Navigation:
+
+Curricula
+    ↓
+Grades
+    ↓
+Subjects
+    ↓
+Sections
+    ↓
+Topics
+    ↓
+Learning Content
+
+Administrator flow:
+
+Select Curriculum
+→ Select Grade
+→ Select Subject
+→ Manage Sections
+→ Manage Topics
+→ Manage Topic Content
+
+Example:
+
+NSSCAS
+└── Grade 12
+    └── Biology
+        ├── Theory
+        │   ├── Cell Biology
+        │   ├── Biological Molecules
+        │   └── Enzymes
+        └── Practical
+            ├── Experimental Skills
+            └── Investigations
+
+Admin must be able to drag/reorder or otherwise reliably change sequence order.
+
+If drag-and-drop is impractical on mobile/web, provide move up/down controls.
+
+---
+
+# 9. TOPIC NOTES / LEARNING CONTENT SYSTEM
+
+THIS IS A CORE REQUIREMENT.
+
+The administrator must be able to add actual learning content to every topic.
+
+A topic is not merely:
+
+"Cell Biology"
+
+It must contain the actual notes the learner studies.
+
+For example:
+
+CELL BIOLOGY
+
+Chapter introduction
+
+1. Cell Structure
+
+Cells are the basic structural and functional units...
+
+[diagram]
+
+2. Prokaryotic Cells
+
+...
+
+3. Eukaryotic Cells
+
+...
+
+Key Terms
+
+...
+
+Summary
+
+...
+
+The system should support rich educational content.
+
+Do NOT limit content to a plain TextInput if avoidable.
+
+Design a structured content model.
+
+Prefer a block-based content architecture.
+
+For example:
+
+topic_content
+    id
+    topic_id
+    title
+    content_type
+    sequence_order
+    is_active
+    created_at
+    updated_at
+
+Possible content types:
+
+heading
+paragraph
+rich_text
+formula
+image
+callout
+key_term
+bullet_list
+numbered_list
+table
+example
+warning
+summary
+video
+attachment
+
+Alternatively use a JSONB content document if that is cleaner and safer for the current architecture.
+
+Choose the architecture that best fits the existing Supabase project.
+
+The important requirement is:
+
+ADMIN CAN AUTHOR REAL NOTES.
+
+---
+
+# 10. EQUATIONS AND SCIENCE CONTENT
+
+This is an education application.
+
+Content must support:
+
+- mathematical equations
+- chemical notation
+- superscripts
+- subscripts
+- Greek letters
+- scientific notation
+- diagrams
+- images
+- tables
+
+Do not create a notes editor that cannot represent actual NSSC/NSSCAS educational material.
+
+For example:
+
+x² + bx + c = 0
+
+must render correctly.
+
+Likewise:
+
+H₂O
+CO₂
+α
+β
+Σ
+∫
+
+should be possible.
+
+Use a proven rendering approach compatible with the existing Expo stack.
+
+Do not introduce an enormous dependency unless necessary.
+
+---
+
+# 11. TOPIC CONTENT VIEWER
+
+When the student opens a topic, the screen should resemble the reference video's chapter/notes experience.
+
+Example:
+
+< Biology • Theory • Cell Biology >
+
+CHAPTER 1
+
+CELL BIOLOGY
+
+[Learning content cards]
+
+Cell Structure
+
+Cells are...
+
+[diagram]
+
+Prokaryotic Cells
+
+...
+
+Key Concepts
+
+...
+
+Important:
+
+The content should be comfortable to read.
+
+Use:
+
+- large readable typography
+- good line height
+- generous spacing
+- rounded content cards
+- subtle borders
+- NamStudy theme
+- dark/light support
+- formulas rendered clearly
+- images scaled appropriately
+
+The learner should be able to scroll naturally through the chapter.
+
+---
+
+# 12. CONTENT PROGRESS — CRITICAL
+
+The system must track actual note/content progress independently from quiz mastery.
+
+Do NOT equate:
+
+"student got 80% on quiz"
+
+with:
+
+"student completed the notes."
+
+These are different signals.
+
+Track at least:
+
+- topic started
+- topic content started
+- content sections viewed
+- content sections completed
+- topic completed
+- last viewed content block
+- last activity timestamp
+- time spent where practical
+- quiz attempts
+- quiz mastery
+- flashcard activity
+- confidence feedback
+
+Possible model:
+
+student_topic_progress
+
+id
+user_id
+topic_id
+started_at
+last_accessed_at
+completed_at
+completion_percent
+last_content_block_id
+time_spent_seconds
+confidence_state
+updated_at
+
+Possible:
+
+student_content_progress
+
+id
+user_id
+content_block_id
+topic_id
+started_at
+completed_at
+last_seen_at
+completion_percent
+
+Do not over-engineer if a single reliable model can represent this cleanly.
+
+---
+
+# 13. DEFINE "TOPIC COMPLETION"
+
+Create a deterministic rule.
+
+For example:
+
+Topic completion =
+all required content blocks viewed/completed
+
+OR
+
+completion threshold >= 90%
+
+The rule must be documented and consistent.
+
+Optional:
+
+A topic can show:
+
+NOT STARTED
+IN PROGRESS
+COMPLETED
+
+And:
+
+0%
+37%
+100%
+
+Do not mark a topic complete merely because the learner opened the screen.
+
+---
+
+# 14. PROGRESS ON SUBJECT LEVEL
+
+Subject progress should be calculated from topic progress.
+
+Example:
+
+Biology
+
+17 / 25 topics completed
+
+68%
+
+This should NOT be manually entered.
+
+It should derive from actual topic/content progress.
+
+If a topic is 50% complete, decide whether subject progress uses:
+
+A) completed topics only
+
+or
+
+B) weighted topic completion
+
+Prefer weighted progress:
+
+sum(topic completion percentages) / number of active topics
+
+This gives a more accurate learning picture.
+
+---
+
+# 15. SEPARATE CONTENT COMPLETION FROM MASTERY
+
+This is extremely important.
+
+A student may have:
+
+Notes completion: 100%
+Quiz mastery: 42%
+
+That means:
+
+"I studied it, but I don't understand it well enough yet."
+
+Another student may have:
+
+Notes completion: 30%
+Quiz mastery: 90%
+
+That means:
+
+"They already know the material."
+
+The UI should distinguish these.
+
+Example:
+
+CELL BIOLOGY
+
+Notes
+████████████████████ 100%
+Completed
+
+Mastery
+████████░░░░░░░░░░░░ 42%
+Needs practice
+
+This becomes extremely valuable for the existing recommendation engine.
+
+---
+
+# 16. INTEGRATE WITH EXISTING MASTERY ENGINE
+
+DO NOT replace the current mastery system.
+
+The repository already calculates topic and subject mastery from quiz activity.
+
+Preserve it.
+
+Extend the learning model so recommendations can consider:
+
+CONTENT_PROGRESS
++
+QUIZ_MASTERY
++
+RECENCY
++
+CONFIDENCE
++
+PAST PAPER ACTIVITY
+
+For example:
+
+Notes incomplete + weak mastery:
+→ "Continue studying"
+
+Notes complete + weak mastery:
+→ "Take a quiz"
+
+Notes complete + strong mastery:
+→ "Try a past paper"
+
+Strong mastery + old activity:
+→ "Refresh this topic"
+
+This should integrate with the existing `getNextBestActions()` system.
+
+---
+
+# 17. CHAPTER CONFIDENCE SYSTEM
+
+The reference video has a very good interaction at the end of a chapter:
+
+"How do you feel about this chapter?"
+
+with several confidence states and a prominent:
+
+"Quiz this chapter"
+
+Implement an equivalent NamStudy interaction.
+
+Possible states:
+
+😵 Need help
+😕 Still learning
+🙂 Almost there
+🔥 Confident
+
+Store the student's selection.
+
+Do not treat this as a decorative UI element.
+
+Use it as a learning signal.
+
+Example:
+
+student_topic_confidence
+
+user_id
+topic_id
+confidence
+created_at
+
+Keep history if practical.
+
+The latest confidence can be used by recommendations.
+
+---
+
+# 18. CHAPTER COMPLETION FLOW
+
+At the end of notes:
+
+--------------------------------
+
+You've reached the end of this topic.
+
+How confident are you?
+
+[ Need Help ]
+[ Still Learning ]
+[ Almost There ]
+[ Confident ]
+
+[ Quiz This Topic ]
+
+--------------------------------
+
+After selecting confidence:
+
+- persist it
+- update topic progress
+- refresh recommendations
+- offer quiz
+- optionally show flashcards
+- optionally offer relevant past papers
+
+---
+
+# 19. QUIZ INTEGRATION
+
+The existing quiz system is already topic-aware.
+
+Preserve it.
+
+A topic screen should have:
+
+QUIZ
+12 questions
+
+START QUIZ →
+
+When launched, pass:
+
+topic_id
+subject
+grade
+curriculum
+
+The quiz result should continue feeding:
+
+quiz_results
+quiz_attempts
+mastery
+recommendations
+
+Do not create a separate quiz implementation.
+
+---
+
+# 20. FLASHCARD INTEGRATION
+
+The same topic screen should expose:
+
+FLASHCARDS
+24 cards
+
+START →
+
+The existing topic_id relationship should remain.
+
+---
+
+# 21. PAST PAPER INTEGRATION
+
+Topic/subject pages should be able to surface relevant past papers.
+
+Example:
+
+PAST PAPERS
+
+2025 Paper 2
+Relevant to this subject
+
+[View Paper]
+
+The current topic screen already exposes a Past Papers area.
+
+Replace its current placeholder-style presentation with actual subject-filtered data.
+
+---
+
+# 22. HOME SCREEN REDESIGN
+
+The existing Home already contains:
+
+- streak
+- exam information
+- Continue Studying
+- recommendations
+- subject mastery
+- study tools
+
+DO NOT rebuild these systems.
+
+Instead improve hierarchy.
+
+New conceptual Home:
+
+Good evening 👋
+
+🔥 12 DAY STREAK
+Keep it going today.
+
+[ NEXT BEST ACTION ]
+
+Biology
+Cell Biology
+Continue studying →
+67% complete
+
+YOUR PROGRESS
+
+Biology       71%
+Mathematics   82%
+Computer Sci. 64%
+
+CONTINUE STUDYING
+
+...
+
+RECOMMENDED FOR YOU
+
+...
+
+QUICK STUDY
+
+Past Papers
+Quizzes
+Flashcards
+Notes
+
+The Next Best Action should become the dominant action on Home.
+
+---
+
+# 23. LIGHT / DARK / SYSTEM MODE
+
+Create a proper theme system.
+
+The existing theme constants should be evolved rather than bypassed.
+
+Current theme values must remain the source of NamStudy's brand identity.
+
+Implement:
+
+System
+Light
+Dark
+
+Settings UI:
+
+Appearance
+
+○ System
+○ Light
+● Dark
+
+Persist preference locally.
+
+System mode follows the device.
+
+Dark mode should not simply invert colours.
+
+Create separate semantic palettes:
+
+light:
+background
+surface
+surfaceAlt
+textPrimary
+textSecondary
+border
+primary
+secondary
+accent
+success
+warning
+danger
+
+dark:
+background
+surface
+surfaceAlt
+textPrimary
+textSecondary
+border
+primary
+secondary
+accent
+success
+warning
+danger
+
+Refactor reusable components to consume semantic theme values.
+
+Avoid hard-coded COLORS.white/background/etc. where doing so prevents dark mode.
+
+---
+
+# 24. SUBJECT VISUAL IDENTITY
+
+Give each subject a subtle visual identity.
+
+Example:
+
+Biology → green
+Chemistry → red/orange
+Physics → amber
+Mathematics → blue/purple
+Computer Science → magenta/cyan
+
+BUT:
+
+Do not replace NamStudy's branding.
+
+Subject colours are accents.
+
+The main application remains NamStudy purple/turquoise.
+
+Subject colours should be stored/configurable rather than hard-coded throughout screens.
+
+---
+
+# 25. NAVIGATION REDESIGN
+
+Review the current tab/navigation architecture.
+
+The learner should have a clean mental model.
+
+Recommended:
+
+HOME
+NOTES
+PAPERS
+QUIZZES
+PROFILE
+
+Or adapt the existing navigation if the current tab count/architecture makes another arrangement better.
+
+Do not blindly add tabs.
+
+The important requirement is that:
+
+Notes = curriculum/content
+
+Papers = subject-organised past papers
+
+Quizzes = practice
+
+Home = personalised next action
+
+Profile = account/settings/subscription
+
+---
+
+# 26. NOTIFICATION SYSTEM
+
+Add a proper push-notification subsystem.
+
+Do not scatter notification calls throughout screens.
+
+Create a central notification service.
+
+Suggested structure:
+
+lib/notifications/
+    service.ts
+    permissions.ts
+    tokens.ts
+    handlers.ts
+    scheduler.ts
+    preferences.ts
+    types.ts
+
+Use Expo Notifications compatible with the current Expo SDK.
+
+Register device push tokens.
+
+Persist tokens securely in Supabase.
+
+Handle:
+
+- permission state
+- token registration
+- token refresh
+- foreground notification
+- notification tap
+- deep linking
+- logout/device cleanup
+
+---
+
+# 27. NOTIFICATION PREFERENCES
+
+Add notification settings.
+
+Categories:
+
+Learning reminders
+Streak reminders
+Achievements
+Exam reminders
+Weekly progress
+Premium/VIP offers
+
+Each can be enabled/disabled where appropriate.
+
+Marketing/VIP notifications must be separately controllable.
+
+Do not force promotional notifications.
+
+---
+
+# 28. STREAK NOTIFICATIONS
+
+The existing streak system should become useful.
+
+Examples:
+
+🔥 Your 12-day streak is waiting!
+
+You haven't studied today.
+
+[Continue Studying]
+
+Only send when appropriate.
+
+Do not spam.
+
+Do not send if the user already studied.
+
+Do not send duplicate reminders.
+
+---
+
+# 29. STUDY REMINDERS
+
+Use actual learning state.
+
+Example:
+
+📚 Biology is waiting for you
+
+You have 15 minutes left in Cell Biology.
+
+[Continue]
+
+The system should prefer personalized reminders over generic:
+
+"Come study!"
+
+---
+
+# 30. WEAK TOPIC NOTIFICATIONS
+
+Where appropriate:
+
+🧠 Time to revisit Cell Biology
+
+Your recent quiz results suggest this topic needs more practice.
+
+[Review Topic]
+
+Do not over-notify.
+
+---
+
+# 31. ACHIEVEMENT NOTIFICATIONS
+
+Examples:
+
+🏆 10 topics completed!
+
+🔥 7-day streak!
+
+🎯 You completed your first past paper!
+
+📚 You've studied for 5 days this week!
+
+Achievements should be based on actual activity.
+
+---
+
+# 32. EXAM COUNTDOWN NOTIFICATIONS
+
+Use the user's actual:
+
+- curriculum
+- grade
+- exam date
+- subjects
+
+Example:
+
+🎯 60 days until your NSSCAS exams.
+
+Today's recommendation:
+
+Biology — Cell Biology
+
+Do not send exam notifications if no exam date is configured.
+
+---
+
+# 33. WEEKLY PROGRESS NOTIFICATION
+
+Once per week:
+
+📊 Your NamStudy weekly progress
+
+Topics completed: 4
+Quiz accuracy: 78%
+Study streak: 5 days
+
+Keep going!
+
+This should link to analytics/progress.
+
+---
+
+# 34. VIP / PREMIUM NOTIFICATIONS
+
+RevenueCat remains the authority for subscription status.
+
+Do NOT use notifications to repeatedly pressure users.
+
+For FREE users only, optionally send approximately once per week:
+
+⭐ Unlock more with NamStudy Prep VIP
+
+Unlimited access to premium resources.
+
+[Explore VIP]
+
+Never send to active VIP users.
+
+Implement frequency limits.
+
+Store campaign delivery history so the same campaign isn't repeatedly delivered.
+
+---
+
+# 35. NOTIFICATION DEEP LINKS
+
+Notifications must open the relevant part of the app.
+
+Examples:
+
+Streak
+→ Home
+
+Weak topic
+→ Topic screen
+
+Quiz reminder
+→ Quiz
+
+Past paper
+→ Paper
+
+VIP
+→ Payment/upgrade screen
+
+Weekly report
+→ Analytics
+
+Do not merely open the app root.
+
+---
+
+# 36. ADMIN CONTENT ANALYTICS
+
+As administrator, I need to know whether content is being used.
+
+Eventually expose:
+
+Topic
+Students started
+Students completed
+Average completion
+Average mastery
+Average quiz score
+Confidence distribution
+Last updated
+
+Example:
+
+BIOLOGY — CELL BIOLOGY
+
+Students started: 124
+Completed notes: 91
+Average mastery: 73%
+Average confidence: "Almost There"
+
+This will allow content quality to be evaluated.
+
+---
+
+# 37. ADMIN CONTENT VERSIONING
+
+Avoid destroying student progress when notes are edited.
+
+If practical, give content a version or updated timestamp.
+
+If an administrator significantly changes a topic:
+
+- preserve existing student progress where appropriate
+- don't arbitrarily reset everyone to 0%
+- optionally detect major content changes and allow the admin to reset/rebaseline the content
+
+Do not silently invalidate historical progress.
+
+---
+
+# 38. ADMIN UX
+
+The admin content editor must be much easier than editing raw database rows.
+
+Recommended:
+
+CONTENT MANAGEMENT
+
+[ Curriculum ▼ ]
+[ Grade ▼ ]
+[ Subject ▼ ]
+
+Sections
+
+THEORY
+    + Add Topic
+
+    Cell Biology
+    Biological Molecules
+    Enzymes
+
+    [Edit] [Reorder] [Deactivate]
+
+Click topic:
+
+CELL BIOLOGY
+
+Description
+[....................]
+
+Content
+
+[ + Add Heading ]
+[ + Add Text ]
+[ + Add Image ]
+[ + Add Formula ]
+[ + Add Key Concept ]
+[ + Add Example ]
+[ + Add Summary ]
+
+[Preview]
+
+[Save]
+
+The admin should see the same content structure the student will eventually see.
+
+---
+
+# 39. PREVIEW MODE
+
+Admin should be able to preview a topic exactly as a learner sees it.
+
+Button:
+
+[ Preview as Student ]
+
+This is important because educational content formatting matters.
+
+---
+
+# 40. SECURITY / RLS
+
+Every new table must have proper RLS.
+
+Learners:
+
+SELECT only appropriate published curriculum/content.
+
+Admins:
+
+INSERT
+UPDATE
+DELETE
+REORDER
+
+Do not expose admin content mutations through insecure client-side checks alone.
+
+Supabase policies must enforce permissions.
+
+Use the existing `users.is_admin` model where appropriate.
+
+Never trust `is_admin` solely because the UI says the user is an admin.
+
+---
+
+# 41. DATABASE DESIGN
+
+Before creating migrations, inspect the existing schema.
+
+Do not duplicate:
+
+curricula
+grades
+curriculum_subjects
+topics
+quizzes
+quiz_attempts
+quiz_results
+flashcards
+papers
+
+Extend existing structures where appropriate.
+
+Add migrations for genuinely new functionality.
+
+Likely additions include:
+
+topic_sections
+
+topic_content
+
+student_topic_progress
+
+student_content_progress
+
+student_topic_confidence
+
+notification_preferences
+
+push_tokens
+
+notification_events
+
+But choose the minimum clean schema required.
+
+Use foreign keys.
+
+Use indexes for:
+
+user_id
+topic_id
+subject_id
+created_at
+sequence_order
+
+Use cascading deletes carefully.
+
+---
+
+# 42. CONTENT PUBLICATION MODEL
+
+Admin content should support:
+
+draft
+published
+archived
+
+Students should only see published content.
+
+Admin can preview drafts.
+
+Do not expose unfinished notes to students.
+
+---
+
+# 43. PERFORMANCE
+
+Do not load an entire subject's full notes content when the student only needs the topic list.
+
+Use staged loading:
+
+Subject
+→ Topics
+
+Topic
+→ Content metadata
+
+Topic opened
+→ Content blocks
+
+Use pagination or sensible chunking for very large topics.
+
+Do not make the entire Notes library one giant Supabase query.
+
+---
+
+# 44. OFFLINE / RESILIENCE
+
+The learner should not lose progress because of a temporary network failure.
+
+At minimum:
+
+- persist local last-read position
+- queue progress updates when appropriate
+- retry safely
+- avoid duplicate progress events
+- recover gracefully after reconnect
+
+Do not allow a network failure to crash the Notes screen.
+
+---
+
+# 45. DESIGN LANGUAGE
+
+Use the visual inspiration from the reference video:
+
+- dark elevated surfaces
+- large rounded cards
+- clear section hierarchy
+- prominent progress cards
+- subject-specific accent colours
+- clean typography
+- large touch targets
+- subtle gradients
+- collapsible sections
+- strong primary actions
+- compact secondary information
+
+But adapt all of this to NamStudy.
+
+Existing NamStudy theme colours remain authoritative.
+
+Do not introduce an unrelated blue/purple design system merely because the reference app uses it.
+
+---
+
+# 46. ANIMATIONS
+
+Use subtle animations for:
+
+- expanding sections
+- progress changes
+- navigation transitions
+- completing topics
+- confidence selection
+- achievement events
+
+Do not overanimate.
+
+Animations must remain performant on lower-end Android devices.
+
+---
+
+# 47. ACCESSIBILITY
+
+Ensure:
+
+- sufficient contrast in both themes
+- accessible touch targets
+- screen-reader labels
+- meaningful icons
+- text does not rely on colour alone
+- progress has textual representation
+- expandable sections communicate state
+
+---
+
+# 48. RESPONSIVE WEB
+
+NamStudy also runs on web.
+
+Do not break web support while implementing mobile improvements.
+
+Where native behaviour differs:
+
+Platform.OS === 'web'
+
+must be handled appropriately.
+
+Do not introduce Android-only APIs into shared code without guards.
+
+---
+
+# 49. EXISTING LEARNING INTELLIGENCE
+
+Preserve the existing:
+
+getUserMastery()
+getNextBestActions()
+
+and related learning services.
+
+Do not replace deterministic mastery with arbitrary AI scoring.
+
+Content progress should be an additional signal.
+
+Recommended learning state should become something like:
+
+CONTENT_INCOMPLETE
+CONTENT_COMPLETE_LOW_MASTERY
+CONTENT_COMPLETE_HIGH_MASTERY
+STALE_MASTERED
+NEEDS_PRACTICE
+CONFIDENT_NOT_TESTED
+
+The recommendation engine should use these states.
+
+---
+
+# 50. CONTINUE STUDYING
+
+The existing Home "Continue Studying" functionality should now be content-aware.
+
+Example:
+
+Continue Studying
+
+Biology
+Cell Biology
+
+You were last reading:
+"Prokaryotic Cells"
+
+67% complete
+
+[Continue]
+
+This should reopen the exact content position.
+
+---
+
+# 51. RESUME POSITION
+
+Store:
+
+last_content_block_id
+
+and optionally:
+
+last_scroll_position
+
+Do not rely exclusively on scroll position because content can change.
+
+Prefer content block position as the durable resume point.
+
+---
+
+# 52. BOOKMARKS
+
+Allow learners to bookmark:
+
+- topics
+- notes/content sections
+- papers
+- quizzes where appropriate
+
+Reuse the existing bookmarks architecture where possible.
+
+Do not create duplicate bookmark systems.
+
+---
+
+# 53. SEARCH
+
+Implement search intelligently.
+
+Global Notes search should return:
+
+Subject
+→ Section
+→ Topic
+→ matching content
+
+Example:
+
+Search:
+"photosynthesis"
+
+Result:
+
+Biology
+→ Theory
+→ Plant Physiology
+→ Photosynthesis
+
+Tapping it should open the relevant topic and ideally highlight/navigate to the matching content.
+
+Paper search remains separately optimised.
+
+---
+
+# 54. MIGRATION / BACKWARD COMPATIBILITY
+
+Existing quiz results and topic mastery must not disappear.
+
+Existing users must continue to see their current:
+
+- quiz history
+- mastery
+- bookmarks
+- papers
+- subscriptions
+- profile
+- school information
+
+Do not reset learning history.
+
+Existing legacy subject references should be mapped safely to the new curriculum subject hierarchy where possible.
+
+---
+
+# 55. REVENUECAT
+
+DO NOT modify RevenueCat simply because this project touches Profile/notifications/UI.
+
+The current RevenueCat implementation is a separate subsystem.
+
+Do not change its API key configuration.
+
+Do not change the purchase architecture unless required by an actual dependency.
+
+VIP UI should continue using the existing subscription authority.
+
+---
+
+# 56. IMPLEMENTATION ORDER
+
+Do NOT attempt all of this as one uncontrolled change.
+
+Create a feature branch:
+
+feature/curriculum-notes-ux-engagement
+
+Implement in these stages.
+
+STAGE 1
+Architecture/schema audit.
+
+STAGE 2
+Database migrations:
+- sections
+- topic content
+- content progress
+- topic progress
+- confidence
+
+STAGE 3
+Admin curriculum/content management.
+
+STAGE 4
+Student Notes subject library.
+
+STAGE 5
+Subject overview redesign.
+
+STAGE 6
+Topic/content viewer.
+
+STAGE 7
+Progress/resume/completion.
+
+STAGE 8
+Quiz/flashcard/paper integration.
+
+STAGE 9
+Past Paper subject hierarchy redesign.
+
+STAGE 10
+Theme engine:
+System / Light / Dark.
+
+STAGE 11
+Home UX redesign around Next Best Action.
+
+STAGE 12
+Notification infrastructure.
+
+STAGE 13
+Notification preferences.
+
+STAGE 14
+Streak/study/exam/achievement notifications.
+
+STAGE 15
+VIP campaign notifications with strict frequency limits.
+
+STAGE 16
+Admin analytics/content usage.
+
+STAGE 17
+Full regression testing.
+
+---
+
+# 57. TESTING REQUIREMENTS
+
+After every stage:
+
+npx tsc --noEmit
+
+Then run the appropriate Expo checks.
+
+Test:
+
+- Android
+- Web
+
+Test as:
+
+FREE user
+VIP user
+Admin
+Normal student
+
+Test:
+
+- empty subject
+- subject with no topics
+- topic with no content
+- topic with one content block
+- topic with many content blocks
+- offline loading
+- network interruption
+- content editing
+- content reordering
+- topic deactivation
+- subject deactivation if supported
+- progress updates
+- repeated opening
+- resume
+- completion
+- quiz completion
+- confidence selection
+- theme switching
+- notification permission denied
+- notification permission granted
+- notification tap/deep link
+- logout/login
+- subscription state
+
+---
+
+# 58. DEFINITION OF DONE
+
+The feature is NOT complete merely because the screens look good.
+
+It is complete when:
+
+ADMIN CAN:
+
+1. Create curriculum.
+2. Create/manage grades.
+3. Create/manage subjects.
+4. Create/manage sections.
+5. Create/manage topics.
+6. Reorder topics.
+7. Publish/unpublish content.
+8. Add rich educational notes.
+9. Add images.
+10. Add formulas.
+11. Preview content.
+12. Edit content.
+13. See content usage/progress analytics.
+
+STUDENT CAN:
+
+1. Browse subjects.
+2. Open a subject.
+3. See subject progress.
+4. Browse sections.
+5. Browse topics.
+6. Open notes.
+7. Resume where they stopped.
+8. See topic completion.
+9. Complete notes.
+10. Select confidence.
+11. Start topic quiz.
+12. Use flashcards.
+13. Access relevant papers.
+14. See mastery.
+15. Receive personalised recommendations.
+16. Receive appropriate notifications.
+17. Control notification preferences.
+18. Switch System/Light/Dark mode.
+
+The system must:
+
+1. Track note progress.
+2. Track topic progress.
+3. Track subject progress.
+4. Preserve quiz mastery.
+5. Combine content progress and mastery for recommendations.
+6. Preserve historical learning data.
+7. Respect Supabase RLS.
+8. Work on Android and Web.
+9. Avoid regressions in RevenueCat/subscriptions.
+10. Avoid regressions in authentication/school selection/profile functionality.
+
+---
+
+# 59. FINAL UX PRINCIPLE
+
+The finished NamStudy experience should answer three questions immediately:
+
+"What am I studying?"
+
+"What should I do next?"
+
+"How am I progressing?"
+
+The learner journey should feel like:
+
+HOME
+↓
+NEXT BEST ACTION
+↓
+SUBJECT
+↓
+SECTION
+↓
+TOPIC
+↓
+NOTES
+↓
+CONFIDENCE
+↓
+QUIZ
+↓
+MASTERY
+↓
+RECOMMENDATION
+↓
+NEXT ACTION
+
+Past papers should follow:
+
+PAPERS
+↓
+SUBJECT
+↓
+YEAR
+↓
+PAPER
+↓
+VIEW / DOWNLOAD / SOLUTION
+
+The platform should feel like one connected learning system rather than separate features.
+
+DO NOT sacrifice existing functionality merely to reproduce the reference app.
+
+Use the reference app as UX inspiration and use the existing NamStudy architecture as the foundation.
+
+Before making destructive architectural changes, explain the change and why it is necessary.
+
+At the end of each implementation stage:
+
+- summarize files changed
+- summarize database migrations
+- summarize UI changes
+- report TypeScript status
+- report tests performed
+- report any unresolved issues
+- do not claim completion unless the implementation actually exists

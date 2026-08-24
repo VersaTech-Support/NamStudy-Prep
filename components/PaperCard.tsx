@@ -14,10 +14,10 @@ interface Paper {
   year: number;
   paper_number: number;
   grade_level: string;
-  subject?: string;
+  subject?: string | null;
   paper_pdf_url: string;
   solution_pdf_url: string | null;
-  description: string;
+  description: string | null;
 }
 
 interface PaperCardProps {
@@ -80,7 +80,7 @@ export default function PaperCard({ paper, canAccessSolutions, isBookmarked, onD
 
       {/* Title */}
       <Text style={styles.title}>{paper.title}</Text>
-      <Text style={styles.description}>{paper.description}</Text>
+      {paper.description ? <Text style={styles.description}>{paper.description}</Text> : null}
 
       {/* Buttons */}
       <View style={styles.buttonRow}>

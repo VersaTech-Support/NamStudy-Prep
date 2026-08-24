@@ -17,14 +17,59 @@ import { supabase } from '@/lib/supabase';
 import { getUserMastery } from '@/lib/learning/mastery';
 import { SubjectMastery, TopicMastery } from '@/lib/learning/types';
 
-// Raw attempt interface for the recent history list
-interface RawAttempt {
-  id: string;
-  topic_name: string;
-  score: number;
-  total_questions: number;
-  subject: string;
-  created_at: string;
+// ── View Model for the attempt history row ──────────────────────────
+// This is what the JSX actually renders — every field is pre-validated.
+interface AttemptViewModel {
+  key: string;           // guaranteed unique, safe for React key
+  topicDisplay: string;  // pre-validated display string
+  dateDisplay: string;   // pre-formatted date string
+  score: number | null;
+  totalQuestions: number | null;
+  percentage: number | null;
+}
+
+/** Safely format a date value; returns a fallback for anything invalid. */
+function safeDateDisplay(raw: unknown): string {
+  if (typeof raw !== 'string' || !raw.trim()) return 'Unknown date';
+  const d = new Date(raw);
+  if (isNaN(d.getTime())) return 'Unknown date';
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+/** Safely compute a bounded percentage; returns null for invalid data. */
+function safePercentage(score: unknown, total: unknown): number | null {
+  const s = typeof score === 'number' && isFinite(score) ? score : null;
+  const t = typeof total === 'number' && isFinite(total) && total > 0 ? total : null;
+  if (s === null || t === null) return null;
+  const p = Math.round((s / t) * 100);
+  return Math.max(0, Math.min(100, p));
+}
+
+/** Normalise one raw attempt (from mastery.ts allAttempts) into a safe ViewModel. */
+function normalizeAttempt(raw: any, index: number): AttemptViewModel {
+  const score = typeof raw?.score === 'number' ? raw.score : null;
+  const totalQuestions = typeof raw?.total_questions === 'number' ? raw.total_questions : null;
+
+  // Build a stable, unique key: prefer the DB id, fall back to index-based
+  const rawId = typeof raw?.id === 'string' && raw.id ? raw.id : null;
+  const key = rawId ?? `attempt-${index}-${typeof raw?.created_at === 'string' ? raw.created_at : index}`;
+
+  // Topic display: prefer topic_name → subject → fallback
+  let topicDisplay = 'Unknown Topic';
+  if (typeof raw?.topic_name === 'string' && raw.topic_name.trim()) {
+    topicDisplay = raw.topic_name;
+  } else if (typeof raw?.subject === 'string' && raw.subject.trim()) {
+    topicDisplay = raw.subject;
+  }
+
+  return {
+    key,
+    topicDisplay,
+    dateDisplay: safeDateDisplay(raw?.created_at),
+    score,
+    totalQuestions,
+    percentage: safePercentage(score, totalQuestions),
+  };
 }
 
 export default function AnalyticsScreen() {
@@ -32,7 +77,7 @@ export default function AnalyticsScreen() {
   const { user } = useUser();
 
   const [loading, setLoading] = useState(true);
-  const [attempts, setAttempts] = useState<RawAttempt[]>([]);
+  const [attempts, setAttempts] = useState<AttemptViewModel[]>([]);
   const [subjectStats, setSubjectStats] = useState<SubjectMastery[]>([]);
   const [overallAvg, setOverallAvg] = useState(0);
 
@@ -48,7 +93,10 @@ export default function AnalyticsScreen() {
       const masteryData = await getUserMastery(user?.id || '');
 
       setSubjectStats(masteryData.subjectMastery);
-      setAttempts(masteryData.allAttempts as any[]); // Using raw attempts for timeline
+      
+      // Normalize every attempt into a safe ViewModel BEFORE React touches it
+      const rawAttempts: any[] = masteryData.allAttempts || [];
+      setAttempts(rawAttempts.map((a, i) => normalizeAttempt(a, i)));
 
       if (masteryData.subjectMastery.length > 0) {
         let sum = 0;
@@ -74,10 +122,7 @@ export default function AnalyticsScreen() {
     return COLORS.red;
   };
 
-  const formatDate = (dateString: string) => {
-    const d = new Date(dateString);
-    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  };
+
 
   if (!user) {
     return (
@@ -177,24 +222,35 @@ export default function AnalyticsScreen() {
           {/* Recent History List */}
           <Text style={[styles.sectionTitle, { marginTop: SPACING.xl }]}>Recent Attempts</Text>
           <View style={styles.historyCard}>
-            {attempts.slice(0, 10).map((attempt, index) => {
-              const perc = Math.round((attempt.score / attempt.total_questions) * 100);
-              return (
-                <View key={attempt.id} style={[styles.historyRow, index === Math.min(10, attempts.length) - 1 && { borderBottomWidth: 0, paddingBottom: 0 }]}>
-                  <View style={styles.historyIconContainer}>
-                    <Ionicons name="checkmark-circle" size={24} color={getProgressColor(perc)} />
-                  </View>
-                  <View style={styles.historyContent}>
-                    <Text style={styles.historyTopic}>{attempt.topic_name}</Text>
-                    <Text style={styles.historyDate}>{formatDate(attempt.created_at)}</Text>
-                  </View>
-                  <View style={styles.historyScoreContainer}>
-                    <Text style={[styles.historyPerc, { color: getProgressColor(perc) }]}>{perc}%</Text>
-                    <Text style={styles.historyFraction}>{attempt.score}/{attempt.total_questions}</Text>
-                  </View>
+            {attempts.slice(0, 10).map((attempt, index) => (
+              <View key={attempt.key} style={[styles.historyRow, index === Math.min(10, attempts.length) - 1 && { borderBottomWidth: 0, paddingBottom: 0 }]}>
+                <View style={styles.historyIconContainer}>
+                  <Ionicons
+                    name="checkmark-circle"
+                    size={24}
+                    color={attempt.percentage !== null ? getProgressColor(attempt.percentage) : COLORS.textMuted}
+                  />
                 </View>
-              );
-            })}
+                <View style={styles.historyContent}>
+                  <Text style={styles.historyTopic}>{attempt.topicDisplay}</Text>
+                  <Text style={styles.historyDate}>{attempt.dateDisplay}</Text>
+                </View>
+                <View style={styles.historyScoreContainer}>
+                  {attempt.percentage !== null ? (
+                    <>
+                      <Text style={[styles.historyPerc, { color: getProgressColor(attempt.percentage) }]}>
+                        {attempt.percentage}%
+                      </Text>
+                      <Text style={styles.historyFraction}>
+                        {attempt.score}/{attempt.totalQuestions}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={[styles.historyPerc, { color: COLORS.textMuted }]}>{'\u2014'}</Text>
+                  )}
+                </View>
+              </View>
+            ))}
           </View>
 
           <View style={{ height: 40 }} />

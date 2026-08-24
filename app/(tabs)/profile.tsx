@@ -23,10 +23,10 @@ interface Payment {
   id: string;
   reference_number: string;
   amount: number;
-  currency: string;
-  status: string;
+  currency: string | null;
+  status: string | null;
   bank_name: string;
-  created_at: string;
+  created_at: string | null;
   admin_note: string | null;
 }
 
@@ -268,14 +268,14 @@ export default function ProfileScreen() {
             <Text style={{ ...FONTS.caption, color: COLORS.textMuted, textTransform: 'uppercase', letterSpacing: 1, marginBottom: SPACING.md }}>Recent Payments</Text>
             {payments.slice(0, 3).map((p) => (
               <View key={p.id} style={styles.menuItem}>
-                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: getStatusColor(p.status), marginRight: SPACING.md }} />
+                <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: getStatusColor(p.status || ''), marginRight: SPACING.md }} />
                 <View style={{ flex: 1 }}>
                   <Text style={{ ...FONTS.caption, color: COLORS.textPrimary, fontWeight: '600', fontSize: 12 }}>{p.reference_number}</Text>
-                  <Text style={{ ...FONTS.small, color: COLORS.textMuted }}>{formatDate(p.created_at)}</Text>
+                  <Text style={{ ...FONTS.small, color: COLORS.textMuted }}>{formatDate(p.created_at || '')}</Text>
                 </View>
-                <View style={[styles.statusBadge, { backgroundColor: getStatusBg(p.status) }]}>
-                  <Ionicons name={getStatusIcon(p.status)} size={12} color={getStatusColor(p.status)} />
-                  <Text style={{ fontSize: 10, fontWeight: '700', color: getStatusColor(p.status) }}>{p.status.charAt(0).toUpperCase() + p.status.slice(1)}</Text>
+                <View style={[styles.statusBadge, { backgroundColor: getStatusBg(p.status || '') }]}>
+                  <Ionicons name={getStatusIcon(p.status || '')} size={12} color={getStatusColor(p.status || '')} />
+                  <Text style={{ fontSize: 10, fontWeight: '700', color: getStatusColor(p.status || '') }}>{p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : ''}</Text>
                 </View>
                 <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary, fontSize: 13, marginLeft: SPACING.sm }}>N${p.amount.toFixed(2)}</Text>
               </View>

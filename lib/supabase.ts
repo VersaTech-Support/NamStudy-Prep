@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { Database } from '@/types/database';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
@@ -6,7 +7,7 @@ import { Platform } from 'react-native';
 const supabaseUrl = 'https://yughpayxnvhbpaolddkt.supabase.co';
 const supabaseKey = 'sb_publishable_vqyyZzvEEbsISiL3pPYaqA_SR3y0_-3';
 
-const supabase = createClient(supabaseUrl, supabaseKey, {
+const supabase = createClient<Database>(supabaseUrl, supabaseKey, {
   auth: {
     storage: Platform.OS === 'web' ? undefined : AsyncStorage,
     autoRefreshToken: true,

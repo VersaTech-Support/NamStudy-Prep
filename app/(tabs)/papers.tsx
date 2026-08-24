@@ -27,10 +27,10 @@ interface Paper {
   year: number;
   paper_number: number;
   grade_level: string;
-  subject?: string;
+  subject?: string | null;
   paper_pdf_url: string;
   solution_pdf_url: string | null;
-  description: string;
+  description: string | null;
 }
 
 export default function PapersScreen() {
@@ -120,7 +120,7 @@ export default function PapersScreen() {
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       return p.title.toLowerCase().includes(query) ||
-        p.description.toLowerCase().includes(query) ||
+        (p.description && p.description.toLowerCase().includes(query)) ||
         p.grade_level.toLowerCase().includes(query) ||
         (p.subject && p.subject.toLowerCase().includes(query));
     }
