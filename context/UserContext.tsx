@@ -39,9 +39,9 @@ interface UserProfile {
 export interface Bookmark {
   id: string;
   item_id: string;
-  item_type: 'paper' | 'quiz';
+  item_type: string;
   title: string;
-  metadata?: Record<string, unknown>;
+  metadata?: any;
   created_at?: string;
 }
 
@@ -534,14 +534,14 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
-      if (data) setBookmarks(data);
+      if (data) setBookmarks(data as Bookmark[]);
       if (error) console.warn('Fetch bookmarks error (expected if offline):', error.message);
     } catch (err) {
       console.warn('Fetch bookmarks exception (expected if offline):', err);
     }
   };
 
-  const toggleBookmark = async (item_id: string, item_type: 'paper' | 'quiz', title: string, metadata?: Record<string, unknown>) => {
+  const toggleBookmark = async (item_id: string, item_type: string, title: string, metadata?: any) => {
     if (!user) return;
     const existing = bookmarks.find(b => b.item_id === item_id);
     if (existing) {
@@ -558,7 +558,7 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single();
       if (data && !error) {
-        setBookmarks(prev => [data, ...prev]);
+        setBookmarks(prev => [data as Bookmark, ...prev]);
       }
     }
   };

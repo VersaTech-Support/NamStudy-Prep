@@ -75,7 +75,7 @@ export async function getUserMastery(userId: string) {
     // 1. Process Authoritative Results
     for (const r of results) {
       // Some quiz_results might lack 'subject', default to 'Mathematics' per legacy behavior
-      const subject = r.subject || 'Mathematics'; 
+      const subject = (r as any).subject || 'Mathematics'; 
       const percentage = (r.total_questions > 0) ? Math.round((r.score / r.total_questions) * 100) : 0;
       
       const sig = `${r.topic_name}_${new Date(r.created_at).getTime()}`;

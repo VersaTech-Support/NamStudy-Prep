@@ -38,7 +38,7 @@ export default function AuthModal({ visible, onClose }: AuthModalProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const [schools, setSchools] = useState<{ id: string; name: string; logo_url?: string }[]>([]);
+  const [schools, setSchools] = useState<{ id: string; name: string; logo_url?: string | null }[]>([]);
   const [schoolSearch, setSchoolSearch] = useState('');
   const [schoolId, setSchoolId] = useState<string | null>(null);
   const [customSchoolName, setCustomSchoolName] = useState('');

@@ -23,16 +23,17 @@ import RecommendationCard from '@/components/ui/RecommendationCard';
 interface QuizQuestion {
   id: string;
   topic_name: string;
-  topic_id?: string;
+  topic_id?: string | null;
+  subject?: string | null;
   question: string;
   option_a: string;
   option_b: string;
   option_c: string;
   option_d: string;
   correct_answer: string;
-  explanation_text: string;
+  explanation_text?: string | null;
+  difficulty?: string | null;
   grade_level: string;
-  difficulty: string;
 }
 
 export default function QuizScreen() {
@@ -316,8 +317,8 @@ export default function QuizScreen() {
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
         <View style={styles.questionInfo}>
-          <View style={[styles.diffBadge, { backgroundColor: getDifficultyColor(currentQuestion.difficulty) + '15' }]}>
-            <Text style={[styles.diffText, { color: getDifficultyColor(currentQuestion.difficulty) }]}>
+          <View style={[styles.diffBadge, { backgroundColor: getDifficultyColor(currentQuestion.difficulty || 'Normal') + '15' }]}>
+            <Text style={[styles.diffText, { color: getDifficultyColor(currentQuestion.difficulty || 'Normal') }]}>
               {currentQuestion.difficulty}
             </Text>
           </View>
