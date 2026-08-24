@@ -28,6 +28,7 @@ import { getUserMastery } from '@/lib/learning/mastery';
 import { getNextBestActions } from '@/lib/learning/recommendations';
 import { SubjectMastery, StudyRecommendation, TopicMastery } from '@/lib/learning/types';
 import RecommendationCard from '@/components/ui/RecommendationCard';
+import SubjectSelectionModal from '@/components/SubjectSelectionModal';
 
 import { LinearGradient } from 'expo-linear-gradient';
 import { FEATURES } from '@/constants/features';
@@ -46,6 +47,10 @@ export default function HomeScreen() {
   const [recommendations, setRecommendations] = useState<StudyRecommendation[]>([]);
   const [subjectStats, setSubjectStats] = useState<SubjectMastery[]>([]);
   const [recentTopic, setRecentTopic] = useState<TopicMastery | null>(null);
+  
+  // Subject Enrollment
+  const [enrolledSubjects, setEnrolledSubjects] = useState<any[]>([]);
+  const [subjectModalVisible, setSubjectModalVisible] = useState(false);
 
   // Exam Countdown (Assume Nov 1st of current year)
   const daysToExam = React.useMemo(() => {
@@ -101,6 +106,23 @@ export default function HomeScreen() {
       });
 
       setRecommendations(nextActions);
+
+      // Fetch Enrolled Subjects
+      const { data: studentSubjects, error: ssError } = await supabase
+        .from('student_subjects')
+        .select(`
+          *,
+          curriculum_subjects (
+            *,
+            grades (*)
+          )
+        `)
+        .eq('user_id', user?.id || '')
+        .eq('is_active', true);
+        
+      if (ssError) console.error('Error fetching student subjects:', ssError);
+      if (studentSubjects) setEnrolledSubjects(studentSubjects);
+      
     } catch (err) {
       console.error('Failed to fetch authenticated data:', err);
     }
@@ -177,6 +199,49 @@ export default function HomeScreen() {
               description="You haven't completed any quizzes yet. Take your first quiz to kickstart your progress."
               actionText="Start a Quiz"
               onAction={() => router.push('/quizzes')}
+              style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
+            />
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <SectionHeader 
+            title="Your Subjects" 
+            actionText="Add Course" 
+            onAction={() => setSubjectModalVisible(true)} 
+          />
+          {enrolledSubjects.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md }}>
+              {enrolledSubjects.map((enrollment) => {
+                const subject = enrollment.curriculum_subjects;
+                if (!subject) return null;
+                const gradeName = subject.grades?.name || '';
+                
+                return (
+                  <TouchableOpacity 
+                    key={enrollment.id} 
+                    style={[styles.subjectCard, { marginRight: SPACING.md }]}
+                    onPress={() => router.push(`/subject/${subject.id}` as any)}
+                  >
+                    <View style={[styles.subjectIconBg, { backgroundColor: subject.color || COLORS.primary }]}>
+                      <Ionicons name={(subject.icon as any) || 'book'} size={24} color={COLORS.white} />
+                    </View>
+                    <View style={styles.subjectCardContent}>
+                      <Text style={styles.subjectCardTitle} numberOfLines={1}>{subject.name}</Text>
+                      {gradeName ? <Text style={styles.subjectCardSubtitle}>{gradeName}</Text> : null}
+                    </View>
+                    <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: SPACING.xs }} />
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+          ) : (
+            <EmptyState 
+              icon="book-outline"
+              title="No subjects yet" 
+              description="Add your first course to build your study dashboard."
+              actionText="Add Course"
+              onAction={() => setSubjectModalVisible(true)}
               style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
             />
           )}
@@ -396,7 +461,19 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {user ? renderAuthenticated() : renderUnauthenticated()}
-      <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
+        <SubjectSelectionModal 
+          visible={subjectModalVisible}
+          onClose={() => setSubjectModalVisible(false)}
+          onEnrollSuccess={() => {
+            setSubjectModalVisible(false);
+            fetchAuthenticatedData();
+          }}
+        />
+        
+        <AuthModal 
+          visible={authVisible} 
+          onClose={() => setAuthVisible(false)} 
+        />
     </View>
   );
 }
@@ -505,4 +582,29 @@ const styles = StyleSheet.create({
   ctaSubtitle: { ...FONTS.body, color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 22, marginBottom: SPACING.xl },
   ctaBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.white, paddingHorizontal: SPACING.xxl, paddingVertical: 14, borderRadius: RADIUS.md },
   ctaBtnText: { ...FONTS.bodyBold, color: COLORS.primary },
+  subjectCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.md,
+    minWidth: 160,
+    ...SHADOWS.sm,
+  },
+  subjectIconBg: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.sm,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: SPACING.sm,
+  },
+  subjectCardContent: {
+    flex: 1,
+  },
+  subjectCardTitle: { ...FONTS.h3, color: COLORS.textPrimary },
+  subjectCardSubtitle: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+  },
 });
