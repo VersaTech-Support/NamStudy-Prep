@@ -19,10 +19,10 @@ interface Flashcard {
   id: string;
   subject: string;
   grade_level: string;
-  topic: string;
+  topic_name: string;
   front_content: string;
   back_content: string;
-  topic_id?: string;
+  topic_id?: string | null;
 }
 
 export default function FlashcardsScreen() {
@@ -181,7 +181,7 @@ export default function FlashcardsScreen() {
               Card {currentIndex + 1} of {cards.length}
             </Text>
             <View style={styles.topicBadge}>
-              <Text style={styles.topicBadgeText}>{cards[currentIndex].topic}</Text>
+              <Text style={styles.topicBadgeText}>{cards[currentIndex]?.topic_name}</Text>
             </View>
           </View>
 

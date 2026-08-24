@@ -27,10 +27,10 @@ interface Paper {
   year: number;
   paper_number: number;
   grade_level: string;
-  subject: string; // NEW
+  subject: string | null; // NEW
   paper_pdf_url: string;
   solution_pdf_url: string | null;
-  description: string;
+  description: string | null;
 }
 
 interface UserRecord {
@@ -38,13 +38,13 @@ interface UserRecord {
   name: string;
   email: string;
   grade_level: string;
-  subscription_status: string;
+  subscription_status: string | null;
   expiry_date: string | null;
-  is_admin: boolean;
-  role?: string;
+  is_admin: boolean | null;
+  role?: string | null;
   school?: string | null;
   school_id?: string | null;
-  is_school_admin?: boolean;
+  is_school_admin?: boolean | null;
 }
 
 interface Quiz {
@@ -78,8 +78,8 @@ interface Notice {
   title: string;
   content: string;
   author_id?: string | null;
-  is_urgent?: boolean;
-  created_at: string;
+  is_urgent?: boolean | null;
+  created_at: string | null;
   schools?: { name: string } | null;
 }
 
@@ -93,7 +93,7 @@ interface Timetable {
   start_time?: string | null;
   duration?: string | null;
   venue?: string | null;
-  created_at: string;
+  created_at: string | null;
   schools?: { name: string } | null;
 }
 
@@ -233,7 +233,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     ]);
 
     if (papersRes.data) setPapers(papersRes.data);
-    if (usersRes.data) setUsers(usersRes.data);
+    if (usersRes.data) setUsers(usersRes.data as any as UserRecord[]);
     if (quizzesRes.data) setQuizzes(quizzesRes.data);
     if (paymentsRes.data) setPayments(paymentsRes.data as PaymentRecord[]);
     if (subjectsRes.data) setAvailableSubjects(subjectsRes.data.map((s: { name: string }) => s.name));
@@ -244,7 +244,7 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     // Compute pending school requests from the fetched users
     if (usersRes.data) {
       const counts: Record<string, number> = {};
-      usersRes.data.forEach((u: UserRecord) => {
+      (usersRes.data as any as UserRecord[]).forEach((u) => {
         if (u.school && !u.school_id) {
           counts[u.school] = (counts[u.school] || 0) + 1;
         }
@@ -293,8 +293,8 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
     if (!manageSchoolUserId) return;
     setSaving(true);
     const { error } = await supabase.rpc('set_school_admin_assignment', {
-      target_user_id: manageSchoolUserId,
-      target_school_id: manageSchoolId,
+      target_user_id: manageSchoolUserId || '',
+      target_school_id: manageSchoolId || '',
       new_is_school_admin: manageSchoolAdmin,
     });
     setSaving(false);
@@ -742,6 +742,35 @@ export default function AdminDashboard({ onlineUsersCount }: { onlineUsersCount?
 
   return (
     <View style={{ flex: 1, paddingHorizontal: SPACING.lg, paddingBottom: SPACING.md }}>
+      {/* Curriculum & Notes CMS Entry */}
+      {isAdmin && (
+        <TouchableOpacity 
+          style={{ 
+            backgroundColor: COLORS.primary, 
+            padding: SPACING.lg, 
+            borderRadius: RADIUS.md, 
+            flexDirection: 'row', 
+            alignItems: 'center', 
+            justifyContent: 'space-between',
+            marginTop: SPACING.md,
+            ...SHADOWS.sm
+          }}
+          onPress={() => router.push('/admin/curriculum' as any)}
+          activeOpacity={0.8}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: SPACING.md }}>
+            <View style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' }}>
+              <Ionicons name="book" size={20} color={COLORS.white} />
+            </View>
+            <View>
+              <Text style={{ ...FONTS.h3, color: COLORS.white, marginBottom: 2 }}>Curriculum & Notes</Text>
+              <Text style={{ ...FONTS.caption, color: 'rgba(255,255,255,0.8)' }}>Manage subjects, sections, topics and content blocks</Text>
+            </View>
+          </View>
+          <Ionicons name="arrow-forward" size={24} color={COLORS.white} />
+        </TouchableOpacity>
+      )}
+
       {/* Live System Metrics Board */}
       <View style={{ marginVertical: SPACING.lg, padding: SPACING.md, backgroundColor: '#fdfdfd', borderRadius: RADIUS.md, borderWidth: 1, borderColor: '#E5E4E2' }}>
         <Text style={{ ...FONTS.h3, color: '#6B7A85', marginBottom: SPACING.md }}>System Overview</Text>

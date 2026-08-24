@@ -21,14 +21,16 @@ import { supabase } from '@/lib/supabase';
 
 interface Payment {
   id: string;
+  user_id: string | null;
   reference_number: string;
   amount: number;
-  currency: string;
-  status: string;
+  currency: string | null;
+  status: string | null;
   bank_name: string;
-  plan_type?: string;
-  created_at: string;
+  plan_type: string | null;
   admin_note: string | null;
+  created_at: string | null;
+  updated_at: string | null;
 }
 
 const BANK_DETAILS = {
@@ -440,17 +442,17 @@ export default function PaymentScreen() {
               {paymentHistory.map((p) => (
                 <View key={p.id} style={styles.historyCard}>
                   <View style={styles.historyCardHeader}>
-                    <View style={[styles.statusBadge, { backgroundColor: getStatusBg(p.status) }]}>
-                      <Ionicons name={getStatusIcon(p.status)} size={14} color={getStatusColor(p.status)} />
-                      <Text style={[styles.statusBadgeText, { color: getStatusColor(p.status) }]}>
-                        {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                    <View style={[styles.statusBadge, { backgroundColor: getStatusBg(p.status || '') }]}>
+                      <Ionicons name={getStatusIcon(p.status || '')} size={14} color={getStatusColor(p.status || '')} />
+                      <Text style={[styles.statusBadgeText, { color: getStatusColor(p.status || '') }]}>
+                        {p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : ''}
                       </Text>
                     </View>
                     <Text style={styles.historyAmount}>N${p.amount.toFixed(2)}</Text>
                   </View>
                   <View style={styles.historyMeta}>
                     <Text style={styles.historyRef}>Ref: {p.reference_number}</Text>
-                    <Text style={styles.historyDate}>{formatDate(p.created_at)}</Text>
+                    <Text style={styles.historyDate}>{formatDate(p.created_at || '')}</Text>
                   </View>
                   {p.admin_note && (
                     <View style={styles.adminNoteBox}>
@@ -911,17 +913,17 @@ export default function PaymentScreen() {
             {paymentHistory.map((p) => (
               <View key={p.id} style={styles.historyCard}>
                 <View style={styles.historyCardHeader}>
-                  <View style={[styles.statusBadge, { backgroundColor: getStatusBg(p.status) }]}>
-                    <Ionicons name={getStatusIcon(p.status)} size={14} color={getStatusColor(p.status)} />
-                    <Text style={[styles.statusBadgeText, { color: getStatusColor(p.status) }]}>
-                      {p.status.charAt(0).toUpperCase() + p.status.slice(1)}
+                  <View style={[styles.statusBadge, { backgroundColor: getStatusBg(p.status || '') }]}>
+                    <Ionicons name={getStatusIcon(p.status || '')} size={14} color={getStatusColor(p.status || '')} />
+                    <Text style={[styles.statusBadgeText, { color: getStatusColor(p.status || '') }]}>
+                      {p.status ? p.status.charAt(0).toUpperCase() + p.status.slice(1) : ''}
                     </Text>
                   </View>
                   <Text style={styles.historyAmount}>N${p.amount.toFixed(2)}</Text>
                 </View>
                 <View style={styles.historyMeta}>
                   <Text style={styles.historyRef}>Ref: {p.reference_number}</Text>
-                  <Text style={styles.historyDate}>{formatDate(p.created_at)}</Text>
+                  <Text style={styles.historyDate}>{formatDate(p.created_at || '')}</Text>
                 </View>
                 {p.admin_note && (
                   <View style={styles.adminNoteBox}>

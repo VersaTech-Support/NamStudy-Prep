@@ -21,7 +21,7 @@ import { TopicMastery, StudyRecommendation } from '@/lib/learning/types';
 interface Topic {
   id: string;
   name: string;
-  description: string;
+  description: string | null;
   subject_id: string;
 }
 

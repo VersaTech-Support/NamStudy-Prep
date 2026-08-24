@@ -15,7 +15,7 @@ import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 
 interface AppConfig {
   latest_version: string;
-  force_update: boolean;
+  force_update: boolean | null;
   download_url: string;
 }
 
