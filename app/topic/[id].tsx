@@ -16,6 +16,7 @@ import RecommendationCard from '@/components/ui/RecommendationCard';
 
 import { getUserMastery } from '@/lib/learning/mastery';
 import { getNextBestActions } from '@/lib/learning/recommendations';
+import { getTopicContentProgress } from '@/lib/learning/contentProgress';
 import { TopicMastery, StudyRecommendation } from '@/lib/learning/types';
 
 interface Topic {
@@ -56,6 +57,7 @@ export default function TopicHubScreen() {
   const [quizCount, setQuizCount] = useState(0);
   const [topicMastery, setTopicMastery] = useState<TopicMastery | null>(null);
   const [recommendation, setRecommendation] = useState<StudyRecommendation | null>(null);
+  const [contentProgressPercent, setContentProgressPercent] = useState(0);
 
   useEffect(() => {
     fetchTopicData();
@@ -120,6 +122,10 @@ export default function TopicHubScreen() {
 
       // 6. Calculate Mastery using central intelligence service
       if (tData && user) {
+        // Content progress
+        const cp = await getTopicContentProgress(user.id, id);
+        setContentProgressPercent(cp.progressPercent);
+
         const masteryData = await getUserMastery(user.id);
         const thisTopicMastery = masteryData.topicMastery.find(t => t.topic_id === id);
         if (thisTopicMastery) {
@@ -127,8 +133,6 @@ export default function TopicHubScreen() {
         }
 
         // Calculate next best action specifically contexted for this topic (if any)
-        // We can use the global engine, and if the primary recommendation isn't this topic, we could force it, 
-        // but for now we just get the top recommendation. If it's a weak topic, it'll naturally bubble up.
         const nextActions = getNextBestActions({
           topicMastery: thisTopicMastery ? [thisTopicMastery] : [], 
           subjectMastery: masteryData.subjectMastery,
@@ -176,36 +180,57 @@ export default function TopicHubScreen() {
       />
       <ScrollView contentContainerStyle={styles.content}>
         
-        {/* Overview & Mastery */}
+        {/* Overview & Progress */}
         <View style={styles.masteryContainer}>
           <Text style={styles.sectionTitle}>Your Progress</Text>
-          {topicMastery !== null ? (
-          <View>
-            <ProgressBar 
-              progress={topicMastery.masteryScore / 100} 
-              height={12} 
-              color={topicMastery.masteryScore >= 70 ? COLORS.green : topicMastery.masteryScore >= 50 ? COLORS.gold : COLORS.red} 
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>
-                {topicMastery.masteryScore}% Mastered
-              </Text>
-              <Text style={{ ...FONTS.small, color: COLORS.textMuted }}>
-                {topicMastery.attempts} attempt{topicMastery.attempts !== 1 ? 's' : ''} 
-                {topicMastery.trend !== 'INSUFFICIENT_DATA' && ` • ${topicMastery.trend.toLowerCase()}`}
-              </Text>
+          
+          {/* Content Completion */}
+          <View style={styles.progressRow}>
+            <View style={styles.progressIcon}>
+              <Ionicons name="document-text" size={16} color={COLORS.primary} />
             </View>
-            {topicMastery.isLowConfidence && (
-              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginTop: 4 }}>
-                Limited practice data available.
-              </Text>
-            )}
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>Notes</Text>
+                <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>{contentProgressPercent}%</Text>
+              </View>
+              <ProgressBar progress={contentProgressPercent / 100} height={6} color={COLORS.primary} />
+            </View>
           </View>
-          ) : (
-            <Text style={styles.noMasteryText}>
-              Practice this topic to build your mastery score.
-            </Text>
-          )}
+
+          {/* Quiz Mastery */}
+          <View style={[styles.progressRow, { marginTop: SPACING.md }]}>
+            <View style={[styles.progressIcon, { backgroundColor: COLORS.greenLight }]}>
+              <Ionicons name="school" size={16} color={COLORS.green} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
+                <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>Mastery</Text>
+                <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>
+                  {topicMastery ? `${topicMastery.masteryScore}%` : '—'}
+                </Text>
+              </View>
+              <ProgressBar 
+                progress={topicMastery ? topicMastery.masteryScore / 100 : 0} 
+                height={6} 
+                color={topicMastery 
+                  ? (topicMastery.masteryScore >= 70 ? COLORS.green : topicMastery.masteryScore >= 50 ? COLORS.gold : COLORS.red)
+                  : COLORS.borderLight
+                } 
+              />
+              {topicMastery && (
+                <Text style={{ ...FONTS.small, color: COLORS.textMuted, marginTop: 4 }}>
+                  {topicMastery.attempts} attempt{topicMastery.attempts !== 1 ? 's' : ''}
+                  {topicMastery.trend !== 'INSUFFICIENT_DATA' && ` • ${topicMastery.trend.toLowerCase()}`}
+                </Text>
+              )}
+              {!topicMastery && (
+                <Text style={{ ...FONTS.small, color: COLORS.textMuted, marginTop: 4 }}>
+                  Take a quiz to build mastery
+                </Text>
+              )}
+            </View>
+          </View>
         </View>
 
         {topic.description ? (
@@ -352,9 +377,19 @@ const styles = StyleSheet.create({
     color: COLORS.textPrimary,
     marginBottom: SPACING.sm,
   },
-  noMasteryText: {
-    ...FONTS.body,
-    color: COLORS.textMuted,
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: SPACING.md,
+  },
+  progressIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: COLORS.primaryLight + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 2,
   },
   description: {
     ...FONTS.body,

@@ -17,6 +17,8 @@ export function configureNotificationHandler() {
       shouldShowAlert: true,
       shouldPlaySound: false,
       shouldSetBadge: false, // Don't manipulate badges arbitrarily per requirement
+      shouldShowBanner: true,
+      shouldShowList: true,
     }),
   });
 }
@@ -50,7 +52,7 @@ export function addNotificationResponseListener(): Notifications.Subscription | 
       const data = response.notification.request.content.data;
       if (!data || !data.routeType) return;
 
-      const payload = data as NotificationPayload;
+      const payload = data as unknown as NotificationPayload;
       const route = resolveNotificationRoute(payload);
       
       if (__DEV__) console.log('[Notifications] Navigating to:', route);

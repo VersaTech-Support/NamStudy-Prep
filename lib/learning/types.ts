@@ -33,5 +33,4 @@ export interface StudyRecommendation {
   gradeLevel?: string;
   priority: number;
   reason: string; // Explains WHY it was recommended
-}
-8
+}

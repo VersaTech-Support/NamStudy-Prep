@@ -33,6 +33,7 @@ export default function TabLayout() {
         },
       }}
     >
+      {/* ── PRIMARY TABS (visible in bottom bar) ─────────────────────── */}
       <Tabs.Screen
         name="index"
         options={{
@@ -43,9 +44,30 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="notes"
+        options={{
+          title: 'Notes',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="book" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'Profile',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="person" size={size} color={color} />
+          ),
+        }}
+      />
+
+      {/* ── CONTEXTUAL ROUTES (hidden from tab bar, still navigable) ── */}
+      <Tabs.Screen
         name="papers"
         options={{
           title: 'Papers',
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="document-text" size={size} color={color} />
           ),
@@ -55,6 +77,7 @@ export default function TabLayout() {
         name="quizzes"
         options={{
           title: 'Quizzes',
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="help-circle" size={size} color={color} />
           ),
@@ -64,6 +87,7 @@ export default function TabLayout() {
         name="school"
         options={{
           title: 'School',
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="school" size={size} color={color} />
           ),
@@ -93,20 +117,12 @@ export default function TabLayout() {
         name="analytics"
         options={{
           title: 'Progress',
+          href: null,
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="stats-chart" size={size} color={color} />
           ),
         }}
       />
-      <Tabs.Screen
-        name="profile"
-        options={{
-          title: 'Profile',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person" size={size} color={color} />
-          ),
-        }}
-      />
     </Tabs>
   );
-}
+}

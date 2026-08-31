@@ -7,14 +7,15 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   NativeSyntheticEvent,
-  NativeScrollEvent
+  NativeScrollEvent,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { COLORS, FONTS, SPACING } from '@/constants/theme';
+import { COLORS, FONTS, SPACING, RADIUS } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import BlockRenderer from '@/components/admin/curriculum/BlockRenderer';
+import ConfidenceCheck from '@/components/ConfidenceCheck';
 
 export default function StudentNotesReader() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -25,11 +26,12 @@ export default function StudentNotesReader() {
   const [contentBlocks, setContentBlocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [confidenceDone, setConfidenceDone] = useState(false);
 
   // Progress tracking
   const [progress, setProgress] = useState(0);
   const maxProgressRef = useRef(0);
-  const progressDbSyncRef = useRef<NodeJS.Timeout | null>(null);
+  const progressDbSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (id) {
@@ -246,10 +248,43 @@ export default function StudentNotesReader() {
           )}
         </View>
         
-        {progress === 100 && contentBlocks.length > 0 && (
-          <View style={styles.completeMessage}>
-            <Ionicons name="checkmark-circle" size={32} color={COLORS.green} />
-            <Text style={styles.completeText}>Topic Completed!</Text>
+        {/* End-of-topic section: Confidence Check + Quiz CTA */}
+        {progress >= 90 && contentBlocks.length > 0 && user && (
+          <View style={styles.endSection}>
+            {/* Confidence Check */}
+            {!confidenceDone ? (
+              <ConfidenceCheck
+                topicId={id}
+                userId={user.id}
+                topicName={topic.name}
+                onComplete={() => setConfidenceDone(true)}
+              />
+            ) : (
+              <View style={styles.completeMessage}>
+                <Ionicons name="checkmark-circle" size={32} color={COLORS.green} />
+                <Text style={styles.completeText}>Topic Complete!</Text>
+              </View>
+            )}
+
+            {/* Quiz CTA */}
+            <TouchableOpacity
+              style={styles.quizCta}
+              onPress={() =>
+                router.push(
+                  `/quiz/${encodeURIComponent(topic.name)}?topic_id=${topic.id}&subject=${encodeURIComponent(subjectName)}` as any
+                )
+              }
+              activeOpacity={0.7}
+              accessibilityLabel="Take quiz for this topic"
+              accessibilityRole="button"
+            >
+              <Ionicons name="help-circle" size={24} color={COLORS.white} />
+              <View style={styles.quizCtaContent}>
+                <Text style={styles.quizCtaTitle}>Test Your Knowledge</Text>
+                <Text style={styles.quizCtaSubtitle}>Take a quiz on {topic.name}</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={20} color={COLORS.white} />
+            </TouchableOpacity>
           </View>
         )}
       </ScrollView>
@@ -341,16 +376,43 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     fontStyle: 'italic',
   },
-  completeMessage: {
+
+  // End-of-topic section
+  endSection: {
     marginTop: SPACING.xxl,
+    gap: SPACING.lg,
+  },
+  completeMessage: {
     alignItems: 'center',
     padding: SPACING.xl,
     backgroundColor: COLORS.surface,
-    borderRadius: 12,
+    borderRadius: RADIUS.lg,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
   completeText: {
     ...FONTS.h3,
     color: COLORS.green,
     marginTop: SPACING.sm,
-  }
+  },
+  quizCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    gap: SPACING.md,
+  },
+  quizCtaContent: {
+    flex: 1,
+  },
+  quizCtaTitle: {
+    ...FONTS.h3,
+    color: COLORS.white,
+    marginBottom: 2,
+  },
+  quizCtaSubtitle: {
+    ...FONTS.small,
+    color: 'rgba(255,255,255,0.8)',
+  },
 });
