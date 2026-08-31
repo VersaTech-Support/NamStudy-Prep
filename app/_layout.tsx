@@ -2,6 +2,8 @@ import { Stack } from "expo-router";
 import { UserProvider } from "@/context/UserContext";
 import { StatusBar } from "expo-status-bar";
 import UpdatePrompt from "@/components/UpdatePrompt";
+import { NotificationService } from "@/lib/notifications/service";
+import { useEffect } from "react";
 
 // Polyfill fetch to prevent Supabase from trying to import @supabase/node-fetch
 if (typeof globalThis.fetch === 'undefined') {
@@ -10,6 +12,10 @@ if (typeof globalThis.fetch === 'undefined') {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    NotificationService.initialize();
+  }, []);
+
   return (
     <UserProvider>
       <StatusBar style="light" />
