@@ -52,6 +52,9 @@ export default function HomeScreen() {
   const [enrolledSubjects, setEnrolledSubjects] = useState<any[]>([]);
   const [subjectModalVisible, setSubjectModalVisible] = useState(false);
 
+  // Continue Reading (last viewed notes)
+  const [lastViewedTopic, setLastViewedTopic] = useState<{ topicId: string; topicName: string; progressPercent: number; subjectName: string } | null>(null);
+
   // Exam Countdown (Assume Nov 1st of current year)
   const daysToExam = React.useMemo(() => {
     const today = new Date();
@@ -122,6 +125,25 @@ export default function HomeScreen() {
         
       if (ssError) console.error('Error fetching student subjects:', ssError);
       if (studentSubjects) setEnrolledSubjects(studentSubjects);
+
+      // Fetch last viewed topic from content progress
+      const { data: lastViewed } = await supabase
+        .from('student_content_progress')
+        .select('topic_id, progress_percent, topics(name, curriculum_subjects:subject_id(name))')
+        .eq('user_id', user?.id || '')
+        .order('last_viewed_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (lastViewed) {
+        const topicData = lastViewed.topics as any;
+        setLastViewedTopic({
+          topicId: lastViewed.topic_id,
+          progressPercent: lastViewed.progress_percent || 0,
+          topicName: topicData?.name || 'Unknown Topic',
+          subjectName: topicData?.curriculum_subjects?.name || '',
+        });
+      }
       
     } catch (err) {
       console.error('Failed to fetch authenticated data:', err);
@@ -204,14 +226,41 @@ export default function HomeScreen() {
           )}
         </View>
 
+        {/* Continue Reading (from notes progress) */}
+        {lastViewedTopic && lastViewedTopic.progressPercent < 100 && (
+          <View style={styles.section}>
+            <SectionHeader title="Continue Reading" />
+            <TouchableOpacity
+              style={styles.continueReadingCard}
+              onPress={() => router.push(`/topic/${lastViewedTopic.topicId}/notes` as any)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.continueReadingIcon]}>
+                <Ionicons name="document-text" size={24} color={COLORS.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.continueReadingTitle} numberOfLines={1}>{lastViewedTopic.topicName}</Text>
+                {lastViewedTopic.subjectName ? (
+                  <Text style={styles.continueReadingSub}>{lastViewedTopic.subjectName}</Text>
+                ) : null}
+                <View style={styles.continueReadingBarBg}>
+                  <View style={[styles.continueReadingBarFill, { width: `${lastViewedTopic.progressPercent}%` }]} />
+                </View>
+              </View>
+              <Text style={styles.continueReadingPercent}>{lastViewedTopic.progressPercent}%</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.section}>
           <SectionHeader 
             title="Your Subjects" 
-            actionText="Add Course" 
-            onAction={() => setSubjectModalVisible(true)} 
+            actionText="View All" 
+            onAction={() => router.push('/notes' as any)} 
           />
-          {enrolledSubjects.length > 0 ? (
+          {(enrolledSubjects.length > 0 || (user?.subjects && user.subjects.length > 0)) ? (
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md }}>
+              {/* Relational enrollments */}
               {enrolledSubjects.map((enrollment) => {
                 const subject = enrollment.curriculum_subjects;
                 if (!subject) return null;
@@ -234,6 +283,25 @@ export default function HomeScreen() {
                   </TouchableOpacity>
                 );
               })}
+              {/* Legacy subjects not already enrolled */}
+              {(user?.subjects || []).filter(
+                (name: string) => !enrolledSubjects.some((e: any) => e.curriculum_subjects?.name === name)
+              ).map((name: string) => (
+                <TouchableOpacity 
+                  key={`legacy-${name}`} 
+                  style={[styles.subjectCard, { marginRight: SPACING.md }]}
+                  onPress={() => router.push(`/quizzes?subject=${encodeURIComponent(name)}` as any)}
+                >
+                  <View style={[styles.subjectIconBg, { backgroundColor: COLORS.primary }]}>
+                    <Ionicons name="book" size={24} color={COLORS.white} />
+                  </View>
+                  <View style={styles.subjectCardContent}>
+                    <Text style={styles.subjectCardTitle} numberOfLines={1}>{name}</Text>
+                    <Text style={styles.subjectCardSubtitle}>From profile</Text>
+                  </View>
+                  <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: SPACING.xs }} />
+                </TouchableOpacity>
+              ))}
             </ScrollView>
           ) : (
             <EmptyState 
@@ -305,6 +373,7 @@ export default function HomeScreen() {
         <View style={styles.section}>
           <SectionHeader title="Quick Study Tools" />
           <View style={styles.toolsGrid}>
+             <ToolCard icon="book" title="Notes" color={COLORS.primary} onPress={() => router.push('/notes' as any)} />
              <ToolCard icon="document-text" title="Papers" color={COLORS.green} onPress={() => router.push('/papers')} />
              <ToolCard icon="help-circle" title="Quizzes" color={COLORS.accent} onPress={() => router.push('/quizzes')} />
              <ToolCard icon="albums" title="Flashcards" color={COLORS.primary} onPress={() => router.push('/flashcards')} />
@@ -315,7 +384,6 @@ export default function HomeScreen() {
                onPress={() => { if (FEATURES.ENABLE_NAMTUTOR) router.push('/tutor'); }} 
                badge={FEATURES.ENABLE_NAMTUTOR ? "NEW" : "Coming Soon"} 
              />
-             <ToolCard icon="bookmark" title="Saved" color={COLORS.red} onPress={() => router.push('/bookmarks')} />
              <ToolCard icon="stats-chart" title="Progress" color={COLORS.primaryDark} onPress={() => router.push('/analytics')} />
           </View>
         </View>
@@ -607,4 +675,30 @@ const styles = StyleSheet.create({
     ...FONTS.small,
     color: COLORS.textMuted,
   },
+
+  // Continue Reading
+  continueReadingCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    padding: SPACING.lg,
+    borderRadius: RADIUS.lg,
+    gap: SPACING.md,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  continueReadingIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 12,
+    backgroundColor: COLORS.primaryLight + '30',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  continueReadingTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary },
+  continueReadingSub: { ...FONTS.small, color: COLORS.textMuted, marginBottom: 6 },
+  continueReadingBarBg: { height: 4, backgroundColor: COLORS.borderLight, borderRadius: 2, marginTop: 4 },
+  continueReadingBarFill: { height: '100%', backgroundColor: COLORS.primary, borderRadius: 2 },
+  continueReadingPercent: { ...FONTS.bodyBold, color: COLORS.primary },
 });

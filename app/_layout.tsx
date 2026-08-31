@@ -39,6 +39,7 @@ export default function RootLayout() {
             }}
           />
           <Stack.Screen name="tutor" options={{ headerShown: false }} />
+          <Stack.Screen name="strengths" options={{ headerShown: false }} />
 
         </Stack>
       </UserProvider>
