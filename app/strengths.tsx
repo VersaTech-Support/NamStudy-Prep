@@ -15,6 +15,7 @@ import { useUser } from '@/context/UserContext';
 import { getUserMastery } from '@/lib/learning/mastery';
 import { TopicMastery } from '@/lib/learning/types';
 import ProgressBar from '@/components/ui/ProgressBar';
+import AuthModal from '@/components/AuthModal';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -33,6 +34,7 @@ export default function StrengthsWeaknessesScreen() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<TabKey>('weaknesses');
+  const [authVisible, setAuthVisible] = useState(false);
   const [data, setData] = useState<CategorizedTopics>({
     strengths: [],
     weaknesses: [],
@@ -40,7 +42,11 @@ export default function StrengthsWeaknessesScreen() {
   });
 
   useEffect(() => {
-    if (user) fetchData();
+    if (user) {
+      fetchData();
+    } else {
+      setLoading(false);
+    }
   }, [user]);
 
   const fetchData = async () => {
@@ -108,6 +114,34 @@ export default function StrengthsWeaknessesScreen() {
 
   const activeConfig = TAB_CONFIG.find((t) => t.key === activeTab)!;
   const activeTopics = data[activeTab];
+
+  if (!user) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Strengths & Weaknesses</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        <View style={styles.center}>
+          <Ionicons name="pulse-outline" size={64} color={COLORS.textMuted} />
+          <Text style={{ ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md }}>Sign In Required</Text>
+          <Text style={{ ...FONTS.body, color: COLORS.textMuted, textAlign: 'center', marginTop: SPACING.xs, maxWidth: 280 }}>
+            Sign in to see your strengths and weaknesses across all topics.
+          </Text>
+          <TouchableOpacity
+            style={{ backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: RADIUS.md, marginTop: SPACING.lg }}
+            onPress={() => setAuthVisible(true)}
+          >
+            <Text style={{ ...FONTS.bodyBold, color: COLORS.white }}>Sign In</Text>
+          </TouchableOpacity>
+        </View>
+        <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>

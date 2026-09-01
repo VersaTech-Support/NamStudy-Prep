@@ -120,6 +120,7 @@ export default function ProfileScreen() {
     { icon: 'stats-chart', label: 'My Performance', color: COLORS.green, onPress: () => router.push('/analytics') },
     { icon: 'document-text', label: 'My Papers', color: COLORS.green, onPress: () => router.push('/papers') },
     { icon: 'help-circle', label: 'My Quizzes', color: COLORS.accent, onPress: () => router.push('/quizzes') },
+    { icon: 'school', label: 'My School', color: COLORS.accent, onPress: () => router.push('/school' as any) },
     { icon: 'card', label: 'Payment & Billing', color: COLORS.gold, onPress: () => router.push('/payment') },
   ];
 

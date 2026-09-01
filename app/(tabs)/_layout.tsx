@@ -47,6 +47,7 @@ export default function TabLayout() {
         name="notes"
         options={{
           title: 'Notes',
+          href: '/notes',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="book" size={size} color={color} />
           ),
