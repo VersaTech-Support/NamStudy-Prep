@@ -384,8 +384,8 @@ const styles = StyleSheet.create({
   inputContainer: { flexDirection: 'row', alignItems: 'flex-end', padding: SPACING.lg, paddingBottom: Platform.OS === 'ios' ? 36 : 48, backgroundColor: COLORS.white, borderTopWidth: 1, borderTopColor: COLORS.borderLight },
   textInput: { flex: 1, backgroundColor: COLORS.background, borderRadius: RADIUS.lg, paddingHorizontal: SPACING.md, paddingTop: 12, paddingBottom: 12, minHeight: 44, maxHeight: 120, ...FONTS.body, color: COLORS.textPrimary },
   sendBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', marginLeft: SPACING.sm, ...SHADOWS.sm },
-  sendBtnDisabled: { backgroundColor: COLORS.borderLight, shadowOpacity: 0 },
+  sendBtnDisabled: { backgroundColor: COLORS.borderLight, boxShadow: 'none' },
   suggestedPromptsContainer: { marginTop: SPACING.xl, gap: SPACING.sm, width: '100%' },
-  suggestedPromptChip: { backgroundColor: COLORS.white, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.primaryLight, shadowColor: COLORS.textPrimary, shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  suggestedPromptChip: { backgroundColor: COLORS.white, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, borderRadius: RADIUS.md, borderWidth: 1, borderColor: COLORS.primaryLight, boxShadow: `0px 1px 2px 0px ${COLORS.textPrimary}0D`, elevation: 1 },
   suggestedPromptText: { ...FONTS.caption, color: COLORS.primary, textAlign: 'center', fontWeight: '500' }
 });

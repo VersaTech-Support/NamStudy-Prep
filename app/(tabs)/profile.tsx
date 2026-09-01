@@ -121,9 +121,9 @@ export default function ProfileScreen() {
   const pendingPayment = payments.find(p => p.status === 'pending');
 
   const activityItems = [
-    { icon: 'stats-chart-outline', label: 'My Performance', route: '/analytics', color: COLORS.primary },
+    { icon: 'stats-chart-outline', label: 'My Performance', route: '/(tabs)/analytics', color: COLORS.primary },
     { icon: 'pulse-outline', label: 'Strengths & Weaknesses', route: '/strengths', color: COLORS.red },
-    { icon: 'bookmark-outline', label: 'Saved Items', route: '/bookmarks', color: COLORS.gold },
+    { icon: 'bookmark-outline', label: 'Saved Items', route: '/(tabs)/bookmarks', color: COLORS.gold },
     { icon: 'card-outline', label: 'Payment & Billing', route: '/payment', color: COLORS.green },
   ];
 

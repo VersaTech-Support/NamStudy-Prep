@@ -130,7 +130,7 @@ export default function HomeScreen() {
         .eq('user_id', user?.id || '')
         .order('last_viewed_at', { ascending: false })
         .limit(1)
-        .single();
+        .maybeSingle();
 
       if (lastViewed) {
         const topicData = lastViewed.topics as any;
@@ -202,7 +202,7 @@ export default function HomeScreen() {
       title: 'Target Test',
       subtitle: 'Practice weak topics',
       color: '#10B981',
-      onPress: () => router.push('/quizzes'),
+      onPress: () => router.push('/target-test' as any),
       disabled: !FEATURES.ENABLE_TARGET_TEST,
     },
     {
@@ -210,7 +210,7 @@ export default function HomeScreen() {
       title: 'Study Planner',
       subtitle: 'Plan your session',
       color: '#10B981',
-      onPress: () => router.push('/quizzes'),
+      onPress: () => router.push('/planner' as any),
       disabled: !FEATURES.ENABLE_STUDY_PLANNER,
     },
     {
@@ -225,7 +225,7 @@ export default function HomeScreen() {
       title: 'Mock Exams',
       subtitle: 'Exam mode',
       color: '#10B981',
-      onPress: () => router.push('/papers'),
+      onPress: () => router.push('/mock-exams' as any),
       disabled: !FEATURES.ENABLE_MOCK_EXAMS,
     },
   ];
@@ -637,6 +637,7 @@ const styles = StyleSheet.create({
 
   // ─── Quick Access Grid ────────────────────────────────────────────
   quickAccessGrid: {
+    width: '100%',
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: SPACING.sm,

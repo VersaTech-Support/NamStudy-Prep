@@ -17,6 +17,7 @@ import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { getCacheData, setCacheData } from '@/lib/cache';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import PaperCard from '@/components/PaperCard';
 import UpgradeModal from '@/components/UpgradeModal';
 import AuthModal from '@/components/AuthModal';
@@ -166,14 +167,10 @@ export default function PapersScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Paper Library</Text>
-          <Text style={styles.headerSubtitle}>
-            {filteredPapers.length} papers available
-          </Text>
-        </View>
-      </View>
+      <ScreenHeader 
+        title="Paper Library" 
+        subtitle={`${filteredPapers.length} papers available`} 
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
         <View style={styles.searchContainer}>
@@ -420,10 +417,6 @@ export default function PapersScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
-  headerContent: {},
-  headerTitle: { ...FONTS.h1, color: COLORS.white, marginBottom: 2 },
-  headerSubtitle: { ...FONTS.caption, color: 'rgba(255,255,255,0.7)' },
   scrollView: { flex: 1 },
   searchContainer: { paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
   searchBar: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingHorizontal: SPACING.lg, paddingVertical: 12, gap: SPACING.sm, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.border },

@@ -17,13 +17,13 @@ export const FEATURES = {
   ENABLE_DARK_MODE: true,
 
   // Deterministic study planner (Today's plan)
-  ENABLE_STUDY_PLANNER: true,
+  ENABLE_STUDY_PLANNER: false,
 
   // Focused assessment from weak/declining topics
-  ENABLE_TARGET_TEST: true,
+  ENABLE_TARGET_TEST: false,
 
   // Full-length mock exam experience
-  ENABLE_MOCK_EXAMS: true,
+  ENABLE_MOCK_EXAMS: false,
 
   // Global search across subjects, topics, papers, quizzes
   ENABLE_GLOBAL_SEARCH: true,
