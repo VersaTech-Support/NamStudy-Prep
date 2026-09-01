@@ -24,7 +24,7 @@ export const COLORS = {
   
   // Neutrals
   white: '#FFFFFF',
-  background: '#F8FAFC',
+  background: '#F7F7FB',
   surface: '#FFFFFF',
   surfaceAlt: '#F1F5F9',
   border: '#E2E8F0',

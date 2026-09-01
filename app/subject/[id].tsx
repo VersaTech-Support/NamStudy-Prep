@@ -12,10 +12,10 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { COLORS, SHADOWS, RADIUS, SPACING, FONTS, GRADIENTS } from '@/constants/theme';
+import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
-import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Centralized engines
 import { getUserMastery } from '@/lib/learning/mastery';
@@ -27,6 +27,7 @@ export default function StudentSubjectDashboard() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { user } = useUser();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
 
   const [subject, setSubject] = useState<any>(null);
   const [sections, setSections] = useState<any[]>([]);
@@ -247,8 +248,8 @@ export default function StudentSubjectDashboard() {
 
   return (
     <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* ─── Header ──────────────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}>
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -258,18 +259,19 @@ export default function StudentSubjectDashboard() {
           <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
         </TouchableOpacity>
 
-        <View style={[styles.iconContainer, { backgroundColor: accentColor }]}>
-          <Ionicons name={subjectIcon as any} size={32} color={COLORS.white} />
-        </View>
-
-        <Text style={styles.subjectTitle}>{subject.name}</Text>
-        {(currName || gradeName) && (
-          <View style={styles.chipContainer}>
-            <Text style={styles.chipText}>
-              {currName}{currName && gradeName ? ' • ' : ''}{gradeName}
-            </Text>
+        <View style={styles.headerContent}>
+          <View style={[styles.iconContainer, { backgroundColor: accentColor }]}>
+            <Ionicons name={subjectIcon as any} size={24} color={COLORS.white} />
           </View>
-        )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.subjectTitle}>{subject.name}</Text>
+            {(currName || gradeName) && (
+              <Text style={styles.subjectSubtitle}>
+                {currName}{currName && gradeName ? ' • ' : ''}{gradeName}
+              </Text>
+            )}
+          </View>
+        </View>
       </View>
 
       <ScrollView
@@ -279,62 +281,34 @@ export default function StudentSubjectDashboard() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={COLORS.primary} />
         }
       >
-        {/* ── Progress Card ─────────────────────────────────────────── */}
-        <LinearGradient
-          colors={GRADIENTS.primary}
-          style={styles.progressCard}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-        >
-          {/* Content Completion (primary metric) */}
-          <View style={styles.progressHeaderRow}>
-            <View>
-              <Text style={styles.progressLabel}>Content Completion</Text>
-              <Text style={styles.progressPercentage}>{contentProgress}%</Text>
+        {/* ── Progress Summary ─────────────────────────────────── */}
+        <View style={styles.progressCard}>
+          <View style={styles.progressRow}>
+            <View style={styles.progressItem}>
+              <Text style={styles.progressValue}>{contentProgress}%</Text>
+              <Text style={styles.progressLabel}>Notes</Text>
             </View>
-            <View style={styles.progressStats}>
-              <Text style={styles.progressStatsText}>
-                {completedTopics}/{totalTopics} topics
-              </Text>
+            <View style={styles.progressDivider} />
+            <View style={styles.progressItem}>
+              <Text style={styles.progressValue}>{masteryScore}%</Text>
+              <Text style={styles.progressLabel}>Mastery</Text>
             </View>
-          </View>
-          <ProgressBar
-            progress={contentProgress / 100}
-            color={COLORS.white}
-            height={10}
-            style={styles.progressBar}
-          />
-
-          {/* Mastery (secondary metric) */}
-          <View style={styles.masteryRow}>
-            <Ionicons name="school-outline" size={16} color="rgba(255,255,255,0.8)" />
-            <Text style={styles.masteryLabel}>Quiz Mastery</Text>
-            <Text style={styles.masteryValue}>{masteryScore}%</Text>
-          </View>
-
-          {/* Meta badges */}
-          <View style={styles.progressDetailsRow}>
-            <View style={styles.progressBadge}>
-              <Ionicons name="trophy-outline" size={12} color={COLORS.white} />
-              <Text style={styles.progressBadgeText}>
-                Target: {studentSubjectRecord?.target_grade || 'Not Set'}
-              </Text>
-            </View>
-            <View style={styles.progressBadge}>
-              <Ionicons name="calendar-outline" size={12} color={COLORS.white} />
-              <Text style={styles.progressBadgeText}>
-                Exam: {examDateDisplay}
-              </Text>
+            <View style={styles.progressDivider} />
+            <View style={styles.progressItem}>
+              <Text style={styles.progressValue}>{completedTopics}/{totalTopics}</Text>
+              <Text style={styles.progressLabel}>Topics</Text>
             </View>
           </View>
-        </LinearGradient>
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${contentProgress}%`, backgroundColor: accentColor }]} />
+          </View>
+        </View>
 
-        {/* ── Quick Actions ─────────────────────────────────────────── */}
+        {/* ── Quick Actions ────────────────────────────────────── */}
         <View style={styles.quickActions}>
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push('/papers' as any)}
-            accessibilityLabel="Past Papers"
           >
             <Ionicons name="document-text-outline" size={20} color={accentColor} />
             <Text style={styles.quickActionText}>Past Papers</Text>
@@ -342,7 +316,6 @@ export default function StudentSubjectDashboard() {
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push('/analytics' as any)}
-            accessibilityLabel="My Progress"
           >
             <Ionicons name="stats-chart-outline" size={20} color={accentColor} />
             <Text style={styles.quickActionText}>My Progress</Text>
@@ -350,7 +323,6 @@ export default function StudentSubjectDashboard() {
           <TouchableOpacity
             style={styles.quickActionButton}
             onPress={() => router.push('/flashcards' as any)}
-            accessibilityLabel="Flashcards"
           >
             <Ionicons name="albums-outline" size={20} color={accentColor} />
             <Text style={styles.quickActionText}>Flashcards</Text>
@@ -362,7 +334,6 @@ export default function StudentSubjectDashboard() {
                 if (Platform.OS === 'web') window.open(subject.syllabus_url!, '_blank');
                 else Linking.openURL(subject.syllabus_url!);
               }}
-              accessibilityLabel="View Syllabus"
             >
               <Ionicons name="book-outline" size={20} color={accentColor} />
               <Text style={styles.quickActionText}>Syllabus</Text>
@@ -370,7 +341,7 @@ export default function StudentSubjectDashboard() {
           )}
         </View>
 
-        {/* ── Sections ──────────────────────────────────────────────── */}
+        {/* ── Sections ─────────────────────────────────────────── */}
         {sections.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="construct-outline" size={40} color={COLORS.textMuted} />
@@ -381,7 +352,7 @@ export default function StudentSubjectDashboard() {
           </View>
         ) : (
           <>
-            <Text style={styles.sectionListTitle}>Syllabus</Text>
+            <Text style={styles.sectionListTitle}>Topics</Text>
             {sections.map((section, idx) => {
               const topicRows: TopicRow[] = section.topics.map((topic: any) => ({
                 id: topic.id,
@@ -440,129 +411,85 @@ const styles = StyleSheet.create({
 
   // Header
   header: {
-    paddingTop: Platform.OS === 'ios' ? 60 : 40,
     paddingBottom: SPACING.lg,
-    paddingHorizontal: SPACING.lg,
-    alignItems: 'center',
+    paddingHorizontal: SPACING.xl,
     backgroundColor: COLORS.background,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
   backButton: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 60 : 40,
-    left: SPACING.lg,
+    marginBottom: SPACING.md,
     padding: SPACING.xs,
-    zIndex: 1,
+    alignSelf: 'flex-start',
+  },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
   },
   iconContainer: {
-    width: 64,
-    height: 64,
-    borderRadius: RADIUS.lg,
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: SPACING.md,
-    ...SHADOWS.sm,
   },
   subjectTitle: {
-    ...FONTS.h1,
+    ...FONTS.h2,
     color: COLORS.textPrimary,
-    textAlign: 'center',
   },
-  chipContainer: {
-    marginTop: SPACING.xs,
-    backgroundColor: COLORS.surfaceAlt,
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 4,
-    borderRadius: RADIUS.full,
-  },
-  chipText: {
+  subjectSubtitle: {
     ...FONTS.small,
     color: COLORS.textMuted,
-    fontWeight: '600',
+    marginTop: 2,
   },
 
   scrollContent: {
-    padding: SPACING.lg,
+    padding: SPACING.xl,
     paddingBottom: 100,
   },
 
   // Progress card
   progressCard: {
-    borderRadius: RADIUS.xl,
-    padding: SPACING.xl,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
     marginBottom: SPACING.lg,
-    ...SHADOWS.md,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
-  progressHeaderRow: {
+  progressRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     marginBottom: SPACING.md,
+  },
+  progressItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  progressDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: COLORS.borderLight,
+  },
+  progressValue: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+    marginBottom: 2,
   },
   progressLabel: {
     ...FONTS.small,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 4,
+    color: COLORS.textMuted,
   },
-  progressPercentage: {
-    fontSize: 36,
-    fontWeight: '800',
-    color: COLORS.white,
+  progressBarBg: {
+    height: 6,
+    backgroundColor: COLORS.borderLight,
+    borderRadius: 3,
   },
-  progressStats: {
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: SPACING.xs,
-    borderRadius: RADIUS.full,
-    alignSelf: 'flex-start',
-    marginTop: 4,
-  },
-  progressStatsText: {
-    ...FONTS.small,
-    color: COLORS.white,
-    fontWeight: '600',
-  },
-  progressBar: {
-    backgroundColor: 'rgba(255,255,255,0.25)',
-  },
-  masteryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: SPACING.xs,
-    marginTop: SPACING.md,
-    paddingTop: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.2)',
-  },
-  masteryLabel: {
-    ...FONTS.small,
-    color: 'rgba(255,255,255,0.8)',
-    flex: 1,
-  },
-  masteryValue: {
-    ...FONTS.bodyBold,
-    color: COLORS.white,
-  },
-  progressDetailsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: SPACING.md,
-    gap: SPACING.sm,
-    flexWrap: 'wrap',
-  },
-  progressBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 6,
-    borderRadius: RADIUS.full,
-  },
-  progressBadgeText: {
-    ...FONTS.small,
-    color: COLORS.white,
+  progressBarFill: {
+    height: '100%',
+    borderRadius: 3,
   },
 
   // Quick actions
@@ -591,7 +518,7 @@ const styles = StyleSheet.create({
 
   // Section list
   sectionListTitle: {
-    ...FONTS.h2,
+    ...FONTS.h3,
     color: COLORS.textPrimary,
     marginBottom: SPACING.md,
   },

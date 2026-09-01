@@ -5,9 +5,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function SchoolHubScreen() {
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'notices' | 'timetables'>('notices');
   const [loading, setLoading] = useState(true);
 
@@ -91,12 +93,12 @@ export default function SchoolHubScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Dynamic Header Banner */}
+      {/* ─── Header ─────────────────────────────────────────────── */}
       <LinearGradient 
         colors={[primaryColor, accentColor]} 
         start={{ x: 0, y: 0 }} 
         end={{ x: 1, y: 1 }} 
-        style={styles.header}
+        style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 16 }]}
       >
         <View style={styles.headerTop}>
           <Text style={styles.headerTitle}>My School Hub</Text>
@@ -111,25 +113,27 @@ export default function SchoolHubScreen() {
           )}
           <View style={{ flex: 1 }}>
             <Text style={styles.schoolName}>{schoolName}</Text>
-            {schoolData?.code ? (
+            {schoolData?.code && (
               <View style={[styles.schoolCodeBadge, { backgroundColor: 'rgba(0,0,0,0.2)' }]}>
                 <Text style={styles.schoolCodeText}>{schoolData.code}</Text>
               </View>
-            ) : null}
+            )}
           </View>
         </View>
       </LinearGradient>
 
-      {/* Next Exam Countdown */}
+      {/* Next Exam Countdown (Overlapping Header) */}
       {Boolean(nextExam) && (
-        <View style={[styles.countdownBar, { backgroundColor: accentColor + '20', borderLeftColor: accentColor }]}>
-          <Ionicons name="alarm" size={18} color={accentColor} />
-          <View style={{ flex: 1, marginLeft: SPACING.sm }}>
-            <Text style={{ ...FONTS.caption, color: COLORS.textPrimary, fontWeight: '700' }}>
-              Next Exam: {nextExam.subject_name}
+        <View style={styles.countdownCard}>
+          <View style={[styles.countdownIconBg, { backgroundColor: accentColor + '15' }]}>
+            <Ionicons name="alarm-outline" size={24} color={accentColor} />
+          </View>
+          <View style={{ flex: 1, marginLeft: SPACING.md }}>
+            <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>
+              Next Exam: {nextExam?.subject_name}
             </Text>
             <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>
-              {nextExam.paper_code} — {countdownText}
+              {nextExam?.paper_code} — {countdownText}
             </Text>
           </View>
         </View>
@@ -141,14 +145,12 @@ export default function SchoolHubScreen() {
           style={[styles.tab, activeTab === 'notices' && { borderBottomColor: primaryColor }]} 
           onPress={() => setActiveTab('notices')}
         >
-          <Ionicons name="megaphone" size={16} color={activeTab === 'notices' ? primaryColor : COLORS.textMuted} />
           <Text style={[styles.tabText, activeTab === 'notices' && { color: primaryColor, fontWeight: '700' }]}>Notice Board</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={[styles.tab, activeTab === 'timetables' && { borderBottomColor: primaryColor }]} 
           onPress={() => setActiveTab('timetables')}
         >
-          <Ionicons name="calendar" size={16} color={activeTab === 'timetables' ? primaryColor : COLORS.textMuted} />
           <Text style={[styles.tabText, activeTab === 'timetables' && { color: primaryColor, fontWeight: '700' }]}>Timetables</Text>
         </TouchableOpacity>
       </View>
@@ -157,7 +159,8 @@ export default function SchoolHubScreen() {
         <ActivityIndicator style={{ marginTop: SPACING.xxl }} size="large" color={primaryColor} />
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          
+
+
           {/* NOTICE BOARD TAB */}
           {activeTab === 'notices' && (
             <View style={styles.tabSection}>
@@ -285,10 +288,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
+  
+  // Header
   header: {
-    paddingTop: 60,
     paddingHorizontal: SPACING.xl,
-    paddingBottom: SPACING.xl,
+    paddingBottom: SPACING.xl + SPACING.lg,
     borderBottomLeftRadius: RADIUS.xl,
     borderBottomRightRadius: RADIUS.xl,
   },
@@ -307,14 +311,14 @@ const styles = StyleSheet.create({
     gap: SPACING.md,
   },
   schoolLogo: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
     borderRadius: RADIUS.md,
     backgroundColor: COLORS.white,
   },
   schoolLogoPlaceholder: {
-    width: 60,
-    height: 60,
+    width: 56,
+    height: 56,
     borderRadius: RADIUS.md,
     alignItems: 'center',
     justifyContent: 'center',
@@ -335,20 +339,35 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     fontWeight: '700',
   },
-  countdownBar: {
+
+  // Countdown Card
+  countdownCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginHorizontal: SPACING.xl,
-    marginTop: SPACING.md,
+    borderRadius: RADIUS.lg,
     padding: SPACING.md,
-    borderRadius: RADIUS.sm,
-    borderLeftWidth: 3,
+    marginHorizontal: SPACING.xl,
+    marginTop: -SPACING.xl, // Overlap the header
+    backgroundColor: COLORS.white,
+    ...SHADOWS.sm,
+    zIndex: 10,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
   },
+  countdownIconBg: {
+    width: 48,
+    height: 48,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  // Tabs
   tabsRow: {
     flexDirection: 'row',
-    backgroundColor: COLORS.white,
+    marginHorizontal: SPACING.xl,
     marginTop: SPACING.md,
-    paddingHorizontal: SPACING.xl,
+    backgroundColor: 'transparent',
     borderBottomWidth: 1,
     borderBottomColor: COLORS.borderLight,
   },
@@ -356,9 +375,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: SPACING.md,
     alignItems: 'center',
-    flexDirection: 'row',
     justifyContent: 'center',
-    gap: SPACING.xs,
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',
   },
@@ -366,11 +383,13 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     color: COLORS.textMuted,
   },
+
   content: {
     flex: 1,
     paddingHorizontal: SPACING.xl,
-    paddingTop: SPACING.lg,
+    paddingTop: SPACING.xl,
   },
+
   tabSection: {
     gap: SPACING.md,
   },
