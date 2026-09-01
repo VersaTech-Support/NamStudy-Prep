@@ -69,18 +69,50 @@ export default function CurriculumIndexScreen() {
     }
   };
 
-  const handleCreateTestCurriculum = async () => {
+  // Icon + color mapping for known Namibian NSSCAS subjects
+  const SUBJECT_META: Record<string, { icon: string; color: string }> = {
+    'Mathematics':       { icon: 'calculator',      color: '#3B82F6' },
+    'Biology':           { icon: 'leaf',             color: '#10B981' },
+    'Chemistry':         { icon: 'flask',            color: '#8B5CF6' },
+    'Physics':           { icon: 'pulse',            color: '#F59E0B' },
+    'Computer Science':  { icon: 'code-slash',       color: '#06B6D4' },
+    'English':           { icon: 'text',             color: '#EC4899' },
+    'Geography':         { icon: 'globe',            color: '#14B8A6' },
+    'History':           { icon: 'time',             color: '#A78BFA' },
+    'Accounting':        { icon: 'cash',             color: '#059669' },
+    'Business Studies':  { icon: 'briefcase',        color: '#D97706' },
+    'Economics':         { icon: 'trending-up',      color: '#EF4444' },
+    'Art':               { icon: 'color-palette',    color: '#F472B6' },
+    'Music':             { icon: 'musical-notes',    color: '#7C3AED' },
+  };
+
+  const handleImportLegacySubjects = async () => {
     try {
       setLoading(true);
 
-      // 1. Find or create the NSSCAS curriculum
+      // 1. Fetch all legacy subjects
+      const { data: legacySubjects, error: legacyErr } = await supabase
+        .from('subjects')
+        .select('name')
+        .order('name');
+
+      if (legacyErr) throw legacyErr;
+      if (!legacySubjects || legacySubjects.length === 0) {
+        const msg = 'No legacy subjects found in the "subjects" table.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Info', msg);
+        setLoading(false);
+        return;
+      }
+
+      // 2. Find or create the NSSCAS curriculum
       let curriculumId: string;
       const { data: existingCurricula } = await supabase
         .from('curricula')
         .select('id')
         .eq('code', 'NSSCAS')
         .limit(1);
-      
+
       if (existingCurricula && existingCurricula.length > 0) {
         curriculumId = existingCurricula[0].id;
       } else {
@@ -93,7 +125,7 @@ export default function CurriculumIndexScreen() {
         curriculumId = newCurriculum.id;
       }
 
-      // 2. Find or create Grade 12 under that curriculum
+      // 3. Find or create Grade 12 under that curriculum
       let gradeId: string;
       const { data: existingGrades } = await supabase
         .from('grades')
@@ -101,7 +133,7 @@ export default function CurriculumIndexScreen() {
         .eq('curriculum_id', curriculumId)
         .eq('name', 'Grade 12')
         .limit(1);
-      
+
       if (existingGrades && existingGrades.length > 0) {
         gradeId = existingGrades[0].id;
       } else {
@@ -114,27 +146,50 @@ export default function CurriculumIndexScreen() {
         gradeId = newGrade.id;
       }
 
-      // 3. Create TEST BIOLOGY subject under that grade
-      const { error: subError } = await supabase
+      // 4. Get existing curriculum_subjects for this grade to avoid duplicates
+      const { data: existingSubs } = await supabase
         .from('curriculum_subjects')
-        .insert({ 
-           grade_id: gradeId,
-           name: 'TEST BIOLOGY',
-           sequence_order: 1,
-           icon: 'flask',
-           color: COLORS.primary
-        });
-        
-      if (subError) throw subError;
-      
-      // Reload
+        .select('name')
+        .eq('grade_id', gradeId);
+      const existingNames = new Set((existingSubs || []).map(s => s.name));
+
+      // 5. Insert each legacy subject that doesn't already exist
+      let imported = 0;
+      let skipped = 0;
+      for (let i = 0; i < legacySubjects.length; i++) {
+        const name = legacySubjects[i].name;
+        if (existingNames.has(name)) {
+          skipped++;
+          continue;
+        }
+
+        const meta = SUBJECT_META[name] || { icon: 'book', color: COLORS.primary };
+        const { error: subError } = await supabase
+          .from('curriculum_subjects')
+          .insert({
+            grade_id: gradeId,
+            name,
+            sequence_order: i + 1,
+            icon: meta.icon,
+            color: meta.color,
+          });
+
+        if (subError) throw subError;
+        imported++;
+      }
+
+      // 6. Report results and reload
+      const msg = `Imported ${imported} subject(s). ${skipped > 0 ? `${skipped} already existed.` : ''}`;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Success', msg);
+
       await fetchCurriculumData();
     } catch (e: any) {
       console.error(e);
       if (Platform.OS === 'web') {
-        window.alert('Failed to create test data: ' + e.message);
+        window.alert('Failed to import subjects: ' + e.message);
       } else {
-        Alert.alert('Error', 'Failed to create test data: ' + e.message);
+        Alert.alert('Error', 'Failed to import subjects: ' + e.message);
       }
       setLoading(false);
     }
@@ -163,10 +218,10 @@ export default function CurriculumIndexScreen() {
           </Text>
           <TouchableOpacity 
             style={[styles.addSubjectBtn, { alignSelf: 'center', marginTop: SPACING.md }]}
-            onPress={handleCreateTestCurriculum}
+            onPress={handleImportLegacySubjects}
           >
-            <Ionicons name="add" size={20} color={COLORS.primary} />
-            <Text style={styles.addSubjectText}>Add Grade/Subject</Text>
+            <Ionicons name="download-outline" size={20} color={COLORS.primary} />
+            <Text style={styles.addSubjectText}>Import Legacy Subjects</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -207,10 +262,10 @@ export default function CurriculumIndexScreen() {
                 
                 <TouchableOpacity 
                   style={styles.addSubjectBtn}
-                  onPress={handleCreateTestCurriculum}
+                  onPress={handleImportLegacySubjects}
                 >
-                  <Ionicons name="add" size={20} color={COLORS.primary} />
-                  <Text style={styles.addSubjectText}>Add Subject</Text>
+                  <Ionicons name="download-outline" size={20} color={COLORS.primary} />
+                  <Text style={styles.addSubjectText}>Import Legacy Subjects</Text>
                 </TouchableOpacity>
               </View>
             </View>
