@@ -133,6 +133,7 @@ export type Database = {
           id: string
           name: string
           sequence_order: number | null
+          syllabus_url: string | null
         }
         Insert: {
           code?: string | null
@@ -144,6 +145,7 @@ export type Database = {
           id?: string
           name: string
           sequence_order?: number | null
+          syllabus_url?: string | null
         }
         Update: {
           code?: string | null
@@ -155,6 +157,7 @@ export type Database = {
           id?: string
           name?: string
           sequence_order?: number | null
+          syllabus_url?: string | null
         }
         Relationships: [
           {

@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, Image, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { Database } from '@/types/database';
+import LaTeXRenderer from '@/components/ui/LaTeXRenderer';
 
 type ContentBlock = Database['public']['Tables']['topic_content']['Row'];
 
@@ -44,11 +45,11 @@ export default function BlockRenderer({ block }: BlockRendererProps) {
       );
 
     case 'formula':
-      // Stub for a LaTeX renderer. In reality, you'd use react-native-math-view
       return (
-        <View style={styles.formulaBox}>
-          <Text style={styles.formulaText}>{content.latex}</Text>
-        </View>
+        <LaTeXRenderer
+          latex={content.latex || ''}
+          displayMode={content.display !== false}
+        />
       );
 
     case 'image':

@@ -8,6 +8,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Platform,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -354,6 +355,19 @@ export default function StudentSubjectDashboard() {
             <Ionicons name="albums-outline" size={20} color={accentColor} />
             <Text style={styles.quickActionText}>Flashcards</Text>
           </TouchableOpacity>
+          {subject?.syllabus_url && (
+            <TouchableOpacity
+              style={styles.quickActionButton}
+              onPress={() => {
+                if (Platform.OS === 'web') window.open(subject.syllabus_url!, '_blank');
+                else Linking.openURL(subject.syllabus_url!);
+              }}
+              accessibilityLabel="View Syllabus"
+            >
+              <Ionicons name="book-outline" size={20} color={accentColor} />
+              <Text style={styles.quickActionText}>Syllabus</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* ── Sections ──────────────────────────────────────────────── */}
