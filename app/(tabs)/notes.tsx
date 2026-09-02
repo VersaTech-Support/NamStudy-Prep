@@ -38,16 +38,8 @@ interface EnrolledSubjectView {
   masteryPercent: number | null;
   targetGrade: string | null;
   examDate: string | null;
-  isLegacy: false;
 }
-
-/** Fallback for subjects only in users.subjects (not yet in curriculum_subjects) */
-interface LegacySubjectView {
-  name: string;
-  isLegacy: true;
-}
-
-type SubjectView = EnrolledSubjectView | LegacySubjectView;
+type SubjectView = EnrolledSubjectView;
 
 // ─── Screen ─────────────────────────────────────────────────────────────────
 
@@ -153,18 +145,7 @@ export default function NotesScreen() {
             masteryPercent: null,
             targetGrade: enrollment.target_grade,
             examDate: enrollment.exam_date,
-            isLegacy: false,
           });
-        }
-      }
-
-      // ── SOURCE 2: Legacy users.subjects fallback ───────────────────
-      // Show any subjects the user has selected on their profile that
-      // aren't already covered by a relational enrollment.
-      const legacySubjects = user.subjects || [];
-      for (const subjectName of legacySubjects) {
-        if (!enrolledNames.has(subjectName)) {
-          allViews.push({ name: subjectName, isLegacy: true });
         }
       }
 
@@ -235,66 +216,6 @@ export default function NotesScreen() {
 
           {subjects.length > 0 ? (
             subjects.map((subject, idx) => {
-              if (subject.isLegacy) {
-                // Legacy subject — from users.subjects, not yet in curriculum_subjects
-                return (
-                  <SubjectCard
-                    key={`legacy-${subject.name}`}
-                    name={subject.name}
-                    variant="compact"
-                    onPress={async () => {
-                      try {
-                        // 1. Get the grade ID for the user's grade level
-                        const { data: grades } = await supabase
-                          .from('grades')
-                          .select('id')
-                          .eq('name', user.grade_level || 'NSSCO')
-                          .limit(1);
-
-                        if (grades?.[0]) {
-                          // 2. Find the matching curriculum subject
-                          const { data: curr } = await supabase
-                            .from('curriculum_subjects')
-                            .select('id')
-                            .eq('name', subject.name)
-                            .eq('grade_id', grades[0].id)
-                            .limit(1);
-
-                          if (curr?.[0]) {
-                            // 3. Auto-enroll them so it's a permanent fix
-                            await supabase.from('student_subjects').upsert({
-                              user_id: user.id,
-                              curriculum_subject_id: curr[0].id,
-                              is_active: true
-                            }, { onConflict: 'user_id,curriculum_subject_id' });
-
-                            // 4. Navigate to the subject!
-                            router.push(`/subject/${curr[0].id}` as any);
-                            return;
-                          }
-                        }
-                        
-                        // Fallback if curriculum subject not found
-                        if (Platform.OS === 'web') {
-                          window.alert(`Please update ${subject.name} by clicking "Add Subject".`);
-                          setSubjectModalVisible(true);
-                        } else {
-                          Alert.alert(
-                            'Update Required', 
-                            `Please select your specific curriculum for ${subject.name}.`,
-                            [
-                              { text: 'Cancel', style: 'cancel' },
-                              { text: 'Update', onPress: () => setSubjectModalVisible(true) }
-                            ]
-                          );
-                        }
-                      } catch (err) {
-                        console.error('Failed to auto-migrate subject:', err);
-                      }
-                    }}
-                  />
-                );
-              }
               // Relational subject — full card with progress
               return (
                 <SubjectCard

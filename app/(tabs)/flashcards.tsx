@@ -52,9 +52,21 @@ export default function FlashcardsScreen() {
       let query = supabase.from('flashcards').select('*');
       
       const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+      let userSubjects: string[] = [];
       
-      if (!userIsAdmin && user?.subjects && user.subjects.length > 0) {
-        query = query.in('subject', user.subjects);
+      if (!userIsAdmin && user) {
+        const { data: ssData } = await supabase
+          .from('student_subjects')
+          .select('curriculum_subjects(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        if (ssData) {
+          userSubjects = ssData.map((s: any) => s.curriculum_subjects?.name).filter(Boolean);
+        }
+      }
+      
+      if (!userIsAdmin && userSubjects.length > 0) {
+        query = query.in('subject', userSubjects);
       }
       
       if (!userIsAdmin && user?.grade_level) {

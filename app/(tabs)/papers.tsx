@@ -12,7 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
@@ -35,14 +35,19 @@ interface Paper {
 }
 
 export default function PapersScreen() {
+  const params = useLocalSearchParams<{ subject?: string; grade?: string; curriculum?: 'Namibian' | 'Cambridge' }>();
+
   const { user, isPro, canAccessSolutions, toggleBookmark, isBookmarked } = useUser();
   const router = useRouter();
   const [papers, setPapers] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);
-  const [curriculumFilter, setCurriculumFilter] = useState<'Namibian' | 'Cambridge'>('Namibian');
-  const [gradeFilter, setGradeFilter] = useState<string>('All');
+  
+  const [curriculumFilter, setCurriculumFilter] = useState<'Namibian' | 'Cambridge'>(params.curriculum || 'Namibian');
+  const [gradeFilter, setGradeFilter] = useState<string>(params.grade || 'All');
+  const [subjectFilter, setSubjectFilter] = useState<string>(params.subject || 'All');
+  
   const [yearFilter, setYearFilter] = useState<number | null>(null);
-  const [subjectFilter, setSubjectFilter] = useState<string>('All');
+  const [enrolledSubjects, setEnrolledSubjects] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [authVisible, setAuthVisible] = useState(false);
   const [isOfflineError, setIsOfflineError] = useState(false);
@@ -51,18 +56,37 @@ export default function PapersScreen() {
   const CAMBRIDGE_GRADES = ['IGCSE', 'AS Level'];
   const currentGrades = curriculumFilter === 'Namibian' ? NAMIBIAN_GRADES : CAMBRIDGE_GRADES;
 
-  // Reset grade filter when curriculum changes
+  // Listen for incoming params changes (e.g. navigating from subject dashboard to already mounted tab)
+  useEffect(() => {
+    if (params.subject) setSubjectFilter(params.subject);
+    if (params.grade) setGradeFilter(params.grade);
+    if (params.curriculum) setCurriculumFilter(params.curriculum);
+  }, [params.subject, params.grade, params.curriculum]);
+
+  // Initial load effect (sets default grade if no params provided)
   useEffect(() => {
     const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+    if (!params.grade && !params.subject) {
+      if (curriculumFilter === 'Namibian' && user && !userIsAdmin && user.grade_level) {
+        setGradeFilter(user.grade_level);
+      } else {
+        setGradeFilter('All');
+      }
+    }
+    fetchPapers();
+  }, [user, curriculumFilter]);
 
-    if (curriculumFilter === 'Namibian' && user && !userIsAdmin && user.grade_level) {
+  const handleCurriculumChange = (curr: 'Namibian' | 'Cambridge') => {
+    setCurriculumFilter(curr);
+    const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+    if (curr === 'Namibian' && user && !userIsAdmin && user.grade_level) {
       setGradeFilter(user.grade_level);
     } else {
       setGradeFilter('All');
     }
     setSubjectFilter('All');
-    fetchPapers();
-  }, [user, curriculumFilter]);
+    // fetchPapers will be triggered by the useEffect on curriculumFilter change
+  };
 
   const fetchPapers = async () => {
     const cacheKey = curriculumFilter === 'Namibian' ? 'papers_list_namibian' : 'papers_list_cambridge';
@@ -82,14 +106,27 @@ export default function PapersScreen() {
         .order('paper_number', { ascending: true });
 
       const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+      let userSubjects: string[] = [];
+      
+      if (user && !userIsAdmin) {
+        const { data: ssData } = await supabase
+          .from('student_subjects')
+          .select('curriculum_subjects(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        if (ssData) {
+          userSubjects = ssData.map((s: any) => s.curriculum_subjects?.name).filter(Boolean);
+          setEnrolledSubjects(userSubjects);
+        }
+      }
 
       // Filter by curriculum grade levels
       const gradeLevels = curriculumFilter === 'Namibian' ? NAMIBIAN_GRADES : CAMBRIDGE_GRADES;
       query = query.in('grade_level', gradeLevels);
 
       // Subject filtering only for Namibian papers when user has subjects set
-      if (curriculumFilter === 'Namibian' && user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
-        query = query.in('subject', user.subjects);
+      if (curriculumFilter === 'Namibian' && user && !userIsAdmin && userSubjects.length > 0) {
+        query = query.in('subject', userSubjects);
       }
 
       const { data, error } = await query;
@@ -130,8 +167,8 @@ export default function PapersScreen() {
 
   const years = [...new Set(papers.map(p => p.year))].sort((a, b) => b - a);
 
-  const availableSubjects: string[] = user?.subjects && user.subjects.length > 0
-    ? user.subjects
+  const availableSubjects: string[] = enrolledSubjects.length > 0
+    ? enrolledSubjects
     : [...new Set(papers.map(p => p.subject).filter((s): s is string => Boolean(s)))];
 
   const handleDownloadPaper = (paper: Paper) => {

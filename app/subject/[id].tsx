@@ -308,7 +308,38 @@ export default function StudentSubjectDashboard() {
         <View style={styles.quickActions}>
           <TouchableOpacity
             style={styles.quickActionButton}
-            onPress={() => router.push('/papers' as any)}
+            onPress={() => {
+              // Map curriculum to expected string in papers.tsx
+              let mappedCurriculum = 'Namibian';
+              if (currName.toLowerCase().includes('cambridge') || currName.toLowerCase().includes('igcse')) {
+                mappedCurriculum = 'Cambridge';
+              }
+              
+              // Map grade to expected string in papers.tsx
+              let mappedGrade = 'NSSCO';
+              if (mappedCurriculum === 'Namibian') {
+                if (gradeName.includes('12') || currName.includes('Advanced Subsidiary') || currName.includes('NSSCAS')) {
+                  mappedGrade = 'NSSCAS';
+                } else {
+                  mappedGrade = 'NSSCO';
+                }
+              } else {
+                if (gradeName.toLowerCase().includes('as level') || currName.toLowerCase().includes('as level')) {
+                  mappedGrade = 'AS Level';
+                } else {
+                  mappedGrade = 'IGCSE';
+                }
+              }
+
+              router.push({
+                pathname: '/papers',
+                params: {
+                  subject: subject.name,
+                  grade: mappedGrade,
+                  curriculum: mappedCurriculum
+                }
+              } as any);
+            }}
           >
             <Ionicons name="document-text-outline" size={20} color={accentColor} />
             <Text style={styles.quickActionText}>Past Papers</Text>

@@ -38,6 +38,7 @@ export default function SubjectSelectionModal({ visible, onClose, onEnrollSucces
   }, [visible]);
 
   const fetchSubjects = async () => {
+    if (!user) return;
     setLoading(true);
     try {
       const { data, error } = await supabase
@@ -49,7 +50,21 @@ export default function SubjectSelectionModal({ visible, onClose, onEnrollSucces
         .order('name');
       
       if (error) throw error;
-      setSubjects(data as unknown as SubjectWithGrade[]);
+      
+      const allSubs = data as unknown as SubjectWithGrade[];
+      const userGrade = user.grade_level || 'NSSCO';
+      
+      const filteredSubs = allSubs.filter(sub => {
+        const g = sub.grades as any;
+        const gName = Array.isArray(g) ? g[0]?.name : g?.name;
+        return gName && (gName.includes(userGrade) || gName === userGrade || userGrade.includes(gName));
+      });
+      
+      if (filteredSubs.length > 0) {
+        setSubjects(filteredSubs);
+      } else {
+        setSubjects(allSubs);
+      }
     } catch (err) {
       console.error('Failed to fetch subjects:', err);
     } finally {
@@ -77,17 +92,6 @@ export default function SubjectSelectionModal({ visible, onClose, onEnrollSucces
         
       if (enrollError) throw enrollError;
 
-      // 2. Backward compatibility: Add to users.subjects string array if not present
-      const currentSubjects = user.subjects || [];
-      if (!currentSubjects.includes(subject.name)) {
-        const { error: userError } = await supabase
-          .from('users')
-          .update({ subjects: [...currentSubjects, subject.name] })
-          .eq('id', user.id);
-        
-        if (userError) throw userError;
-      }
-
       if (onEnrollSuccess) {
         onEnrollSuccess();
       } else {
@@ -105,7 +109,8 @@ export default function SubjectSelectionModal({ visible, onClose, onEnrollSucces
 
   // Group by Grade
   const groupedSubjects = subjects.reduce((acc, sub) => {
-    const gradeName = sub.grades?.name || 'Other';
+    const g = sub.grades as any;
+    const gradeName = (Array.isArray(g) ? g[0]?.name : g?.name) || 'Other';
     if (!acc[gradeName]) acc[gradeName] = [];
     acc[gradeName].push(sub);
     return acc;

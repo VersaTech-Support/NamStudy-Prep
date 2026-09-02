@@ -23,38 +23,10 @@ export default function EditProfileScreen() {
   const [name, setName] = useState(user?.name || '');
   const [school, setSchool] = useState(user?.school || '');
   const [gradeLevel, setGradeLevel] = useState<'NSSCO' | 'NSSCAS' | 'IGCSE' | 'AS Level'>(user?.grade_level || 'NSSCO');
-  const [availableSubjects, setAvailableSubjects] = useState<string[]>([]);
-
-  useEffect(() => {
-    const fetchSubjects = async () => {
-      const { data } = await supabase.from('subjects').select('name').order('name');
-      if (data) setAvailableSubjects(data.map(s => s.name));
-    };
-    fetchSubjects();
-  }, []);
-  
-  // NEW: Initialize subjects state from user profile, defaulting to Mathematics if empty
-  const [subjects, setSubjects] = useState<string[]>(user?.subjects && user.subjects.length > 0 ? user.subjects : ['Mathematics']);
   
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-
-  // NEW: Handler to toggle subject selection
-  const toggleSubject = (subject: string) => {
-    setSubjects(prev => {
-      if (prev.includes(subject)) {
-        // Prevent deselecting the last subject
-        if (prev.length === 1) {
-          Alert.alert('Notice', 'You must select at least one subject.');
-          return prev;
-        }
-        return prev.filter(s => s !== subject);
-      } else {
-        return [...prev, subject];
-      }
-    });
-  };
 
   const handleSave = async () => {
     if (!name.trim()) {
@@ -69,7 +41,6 @@ export default function EditProfileScreen() {
         name: name.trim(),
         grade_level: gradeLevel,
         school: school.trim(),
-        subjects: subjects, // NEW: Include subjects in save payload
       });
 
       if (!profileSuccess) {
@@ -204,29 +175,6 @@ export default function EditProfileScreen() {
             </TouchableOpacity>
           </View>
 
-          {/* NEW: Subject Selector Area */}
-          <Text style={[styles.label, { marginTop: SPACING.lg }]}>Active Subjects</Text>
-          <Text style={{ ...FONTS.small, color: COLORS.textMuted, marginBottom: SPACING.sm }}>
-            Select the subjects you want to see content for.
-          </Text>
-          <View style={styles.subjectsContainer}>
-            {availableSubjects.map(subject => {
-              const isSelected = subjects.includes(subject);
-              return (
-                <TouchableOpacity
-                  key={subject}
-                  style={[styles.subjectChip, isSelected && styles.subjectChipActive]}
-                  onPress={() => toggleSubject(subject)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[styles.subjectChipText, isSelected && styles.subjectChipTextActive]}>
-                    {subject}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-
           <Text style={[styles.label, { marginTop: SPACING.xl }]}>Change Password (Optional)</Text>
           <View style={styles.inputContainer}>
             <Ionicons name="lock-closed-outline" size={18} color={COLORS.textMuted} />
@@ -322,33 +270,6 @@ const styles = StyleSheet.create({
   gradeBtnActiveNSSCAS: { backgroundColor: COLORS.goldLight, borderColor: COLORS.gold },
   gradeBtnText: { ...FONTS.caption, color: COLORS.textSecondary, fontWeight: '600' },
   gradeBtnTextActive: { color: COLORS.textPrimary, fontWeight: '700' },
-  // NEW: Styles for the Subject Chips
-  subjectsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: SPACING.sm,
-    marginTop: SPACING.xs,
-  },
-  subjectChip: {
-    paddingHorizontal: SPACING.md,
-    paddingVertical: 8,
-    borderRadius: RADIUS.full,
-    backgroundColor: COLORS.background,
-    borderWidth: 1,
-    borderColor: COLORS.border,
-  },
-  subjectChipActive: {
-    backgroundColor: COLORS.primary + '15',
-    borderColor: COLORS.primary,
-  },
-  subjectChipText: {
-    ...FONTS.caption,
-    color: COLORS.textSecondary,
-  },
-  subjectChipTextActive: {
-    color: COLORS.primary,
-    fontWeight: '700',
-  },
   saveBtn: {
     backgroundColor: COLORS.primary,
     paddingVertical: 16,

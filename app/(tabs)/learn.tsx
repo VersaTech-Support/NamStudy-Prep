@@ -30,7 +30,6 @@ interface SubjectItem {
   gradeName: string;
   topicCount: number;
   masteryPercent: number;
-  isLegacy?: boolean;
 }
 
 // ─── Screen ─────────────────────────────────────────────────────────
@@ -128,23 +127,6 @@ export default function LearnScreen() {
             gradeName: cs.grades?.name || '',
             topicCount: topicCount || 0,
             masteryPercent,
-          });
-        }
-      }
-
-      // ── Legacy subjects fallback ──────────────────────────────────
-      const legacySubjects = user.subjects || [];
-      for (const name of legacySubjects) {
-        if (!enrolledNames.has(name)) {
-          items.push({
-            id: `legacy-${name}`,
-            name,
-            icon: null,
-            color: null,
-            gradeName: '',
-            topicCount: 0,
-            masteryPercent: 0,
-            isLegacy: true,
           });
         }
       }
@@ -250,11 +232,7 @@ export default function LearnScreen() {
                   key={subject.id}
                   style={styles.subjectCard}
                   onPress={() => {
-                    if (subject.isLegacy) {
-                      router.push(`/quizzes?subject=${encodeURIComponent(subject.name)}` as any);
-                    } else {
-                      router.push(`/subject/${subject.id}` as any);
-                    }
+                    router.push(`/subject/${subject.id}` as any);
                   }}
                   activeOpacity={0.7}
                 >

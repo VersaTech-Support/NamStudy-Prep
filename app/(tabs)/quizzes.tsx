@@ -37,6 +37,7 @@ export default function QuizzesScreen() {
   const [authVisible, setAuthVisible] = useState(false);
   const [freeAttempts, setFreeAttempts] = useState<Record<string, number>>({});
   const [isOfflineError, setIsOfflineError] = useState(false);
+  const [enrolledSubjects, setEnrolledSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     fetchTopics();
@@ -57,9 +58,22 @@ export default function QuizzesScreen() {
         .select('topic_name, grade_level, subject');
 
       const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+      let userSubjects: string[] = [];
 
-      if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
-        query = query.in('subject', user.subjects);
+      if (user && !userIsAdmin) {
+        const { data: ssData } = await supabase
+          .from('student_subjects')
+          .select('curriculum_subjects(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        if (ssData) {
+          userSubjects = ssData.map((s: any) => s.curriculum_subjects?.name).filter(Boolean);
+          setEnrolledSubjects(userSubjects);
+        }
+      }
+
+      if (user && !userIsAdmin && userSubjects.length > 0) {
+        query = query.in('subject', userSubjects);
       }
 
       const { data, error } = await query;
@@ -101,8 +115,8 @@ export default function QuizzesScreen() {
     return true;
   });
 
-  const availableSubjects = user?.subjects && user.subjects.length > 0
-    ? user.subjects
+  const availableSubjects = enrolledSubjects.length > 0
+    ? enrolledSubjects
     : [...new Set(topics.map(t => t.subject))].filter(Boolean);
 
   const handleTopicPress = (topic: TopicSummary) => {

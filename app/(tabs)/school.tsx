@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, SPACING, RADIUS, FONTS, SHADOWS } from '@/constants/theme';
@@ -12,10 +12,12 @@ export default function SchoolHubScreen() {
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState<'notices' | 'timetables'>('notices');
   const [loading, setLoading] = useState(true);
+  const [selectedImage, setSelectedImage] = useState<any>(null);
 
   const [schoolData, setSchoolData] = useState<any>(null);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [timetables, setTimetables] = useState<any[]>([]);
+  const [enrolledSubjects, setEnrolledSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     fetchSchoolHubData();
@@ -63,6 +65,20 @@ export default function SchoolHubScreen() {
     const { data: timeData } = await timeQuery;
     if (timeData) setTimetables(timeData);
 
+    // Fetch enrolled subjects to personalize the Next Exam widget
+    if (user) {
+      const { data: ssData } = await supabase
+        .from('student_subjects')
+        .select('curriculum_subjects(name)')
+        .eq('user_id', user.id)
+        .eq('is_active', true);
+      
+      if (ssData) {
+        const subjects = ssData.map((s: any) => s.curriculum_subjects?.name).filter(Boolean);
+        setEnrolledSubjects(subjects);
+      }
+    }
+
     setLoading(false);
   };
 
@@ -72,14 +88,44 @@ export default function SchoolHubScreen() {
 
   // Calculate countdown for the next upcoming exam
   const now = new Date();
-  const nextExam = timetables.find(t => new Date(t.exam_date) >= now);
+  now.setHours(0, 0, 0, 0); // Normalize to start of day for accurate day counting
+  
+  // Only consider exams for subjects the user is actually taking (if we have that data)
+  const upcomingExams = timetables.filter(t => {
+    const isFuture = new Date(t.exam_date) >= now;
+    if (enrolledSubjects.length === 0) return isFuture; // Fallback if no enrolled subjects
+    return isFuture && enrolledSubjects.includes(t.subject_name);
+  });
+  
+  const nextExamDateStr = upcomingExams.length > 0 ? upcomingExams[0].exam_date : null;
+  const nextExams = nextExamDateStr ? upcomingExams.filter(t => t.exam_date === nextExamDateStr) : [];
+  
   let countdownText = '';
-  if (nextExam) {
-    const diff = new Date(nextExam.exam_date).getTime() - now.getTime();
+  let nextExamSubjectString = '';
+  let nextExamPaperString = '';
+
+  if (nextExams.length > 0 && nextExamDateStr) {
+    const diff = new Date(nextExamDateStr).getTime() - now.getTime();
     const days = Math.floor(diff / (1000 * 60 * 60 * 24));
     if (days === 0) countdownText = 'Today!';
     else if (days === 1) countdownText = 'Tomorrow!';
     else countdownText = `${days} days away`;
+
+    // Group by subject
+    const subjectsMap: Record<string, string[]> = {};
+    nextExams.forEach(exam => {
+      if (!subjectsMap[exam.subject_name]) subjectsMap[exam.subject_name] = [];
+      subjectsMap[exam.subject_name].push(exam.paper_code);
+    });
+    
+    const subjectNames = Object.keys(subjectsMap);
+    nextExamSubjectString = subjectNames.join(' & ');
+    
+    if (subjectNames.length === 1) {
+      nextExamPaperString = subjectsMap[subjectNames[0]].join(' & ');
+    } else {
+      nextExamPaperString = subjectNames.map(sub => `${sub}: ${subjectsMap[sub].join(' & ')}`).join(' • ');
+    }
   }
 
   if (!user) {
@@ -123,17 +169,17 @@ export default function SchoolHubScreen() {
       </LinearGradient>
 
       {/* Next Exam Countdown (Overlapping Header) */}
-      {Boolean(nextExam) && (
+      {nextExams.length > 0 && (
         <View style={styles.countdownCard}>
           <View style={[styles.countdownIconBg, { backgroundColor: accentColor + '15' }]}>
             <Ionicons name="alarm-outline" size={24} color={accentColor} />
           </View>
           <View style={{ flex: 1, marginLeft: SPACING.md }}>
             <Text style={{ ...FONTS.bodyBold, color: COLORS.textPrimary }}>
-              Next Exam: {nextExam?.subject_name}
+              Next Exam: {nextExamSubjectString}
             </Text>
             <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>
-              {nextExam?.paper_code} — {countdownText}
+              {nextExamPaperString} — {countdownText}
             </Text>
           </View>
         </View>
@@ -203,19 +249,61 @@ export default function SchoolHubScreen() {
           {/* TIMETABLES TAB */}
           {activeTab === 'timetables' && (
             <View style={styles.tabSection}>
-              
-              {/* Official Timetable Image Gallery */}
-              <View style={styles.officialTimetableSection}>
-                <Text style={styles.sectionHeaderTitle}>Official NSSCO 2026 Timetable</Text>
-                <Text style={[styles.sectionHeaderSub, { marginBottom: SPACING.md }]}>Swipe to view the full Ministry schedule.</Text>
-                
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.md }}>
-                  <Image source={require('@/assets/images/timetable-1.png')} style={styles.timetableImage} resizeMode="cover" />
-                  <Image source={require('@/assets/images/timetable-2.png')} style={styles.timetableImage} resizeMode="cover" />
-                  <Image source={require('@/assets/images/timetable-3.png')} style={styles.timetableImage} resizeMode="cover" />
-                  <Image source={require('@/assets/images/timetable-4.png')} style={styles.timetableImage} resizeMode="cover" />
-                </ScrollView>
-              </View>
+              {/* Official Timetable Image Galleries */}
+              {(() => {
+                const isStaff = user?.role === 'admin' || user?.role === 'teacher' || (user as any)?.is_admin;
+                const grade = user?.grade_level || '';
+                const showNSSCO = isStaff || grade.includes('NSSCO') || grade.includes('IGCSE') || !grade;
+                const showNSSCAS = isStaff || grade.includes('NSSCAS') || grade.includes('AS Level') || !grade;
+
+                return (
+                  <>
+                    {showNSSCO && (
+                      <View style={styles.officialTimetableSection}>
+                        <Text style={styles.sectionHeaderTitle}>Official NSSCO 2026 Timetable</Text>
+                        <Text style={[styles.sectionHeaderSub, { marginBottom: SPACING.md }]}>Swipe to view the full Ministry schedule.</Text>
+                        
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.md }}>
+                  <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCO/timetable-1.png'))} activeOpacity={0.8}>
+                    <Image source={require('@/assets/images/timetables/NSSCO/timetable-1.png')} style={styles.timetableImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCO/timetable-2.png'))} activeOpacity={0.8}>
+                    <Image source={require('@/assets/images/timetables/NSSCO/timetable-2.png')} style={styles.timetableImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCO/timetable-3.png'))} activeOpacity={0.8}>
+                    <Image source={require('@/assets/images/timetables/NSSCO/timetable-3.png')} style={styles.timetableImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCO/timetable-4.png'))} activeOpacity={0.8}>
+                    <Image source={require('@/assets/images/timetables/NSSCO/timetable-4.png')} style={styles.timetableImage} resizeMode="cover" />
+                  </TouchableOpacity>
+                        </ScrollView>
+                      </View>
+                    )}
+
+                    {showNSSCO && showNSSCAS && <View style={styles.divider} />}
+
+                    {/* Official NSSCAS Timetable Image Gallery */}
+                    {showNSSCAS && (
+                      <View style={styles.officialTimetableSection}>
+                        <Text style={styles.sectionHeaderTitle}>Official NSSCAS 2026 Timetable</Text>
+                        <Text style={[styles.sectionHeaderSub, { marginBottom: SPACING.md }]}>Swipe to view the full Ministry schedule.</Text>
+                        
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: SPACING.md }}>
+                          <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCAS/AStimetable_1.png'))} activeOpacity={0.8}>
+                            <Image source={require('@/assets/images/timetables/NSSCAS/AStimetable_1.png')} style={styles.timetableImage} resizeMode="cover" />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCAS/AStimetable_2.png'))} activeOpacity={0.8}>
+                            <Image source={require('@/assets/images/timetables/NSSCAS/AStimetable_2.png')} style={styles.timetableImage} resizeMode="cover" />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => setSelectedImage(require('@/assets/images/timetables/NSSCAS/AStimetable_3.png'))} activeOpacity={0.8}>
+                            <Image source={require('@/assets/images/timetables/NSSCAS/AStimetable_3.png')} style={styles.timetableImage} resizeMode="cover" />
+                          </TouchableOpacity>
+                        </ScrollView>
+                      </View>
+                    )}
+                  </>
+                );
+              })()}
 
               <View style={styles.divider} />
               
@@ -227,51 +315,78 @@ export default function SchoolHubScreen() {
                   <Text style={{ ...FONTS.small, color: COLORS.textMuted, textAlign: 'center' }}>Exam timetables will appear here once published.</Text>
                 </View>
               ) : (
-                timetables.map((exam) => {
-                  const examDate = new Date(exam.exam_date);
-                  const isPast = examDate < now;
-                  return (
-                    <View key={exam.id} style={[styles.timetableCard, isPast && { opacity: 0.5 }]}>
-                      <View style={[styles.examDateBox, { backgroundColor: primaryColor + '10' }]}>
-                        <Text style={[styles.examDateMonth, { color: primaryColor }]}>
-                          {examDate.toLocaleDateString('en-US', { month: 'short' }).toUpperCase()}
-                        </Text>
-                        <Text style={[styles.examDateDay, { color: primaryColor }]}>
-                          {examDate.getDate()}
-                        </Text>
-                      </View>
-                      <View style={{ flex: 1, paddingLeft: SPACING.md }}>
-                        <Text style={styles.examSubject}>{exam.subject_name}</Text>
-                        <Text style={styles.examPaper}>{exam.paper_code}</Text>
-                        <View style={styles.examDetailsRow}>
-                          {Boolean(exam.start_time) && (
-                            <View style={styles.examDetail}>
-                              <Ionicons name="time" size={14} color={COLORS.textMuted} />
-                              <Text style={styles.examDetailText}>{exam.start_time}</Text>
-                            </View>
-                          )}
-                          {Boolean(exam.duration) && (
-                            <View style={styles.examDetail}>
-                              <Ionicons name="hourglass" size={14} color={COLORS.textMuted} />
-                              <Text style={styles.examDetailText}>{exam.duration}</Text>
-                            </View>
-                          )}
-                          {Boolean(exam.venue) && (
-                            <View style={styles.examDetail}>
-                              <Ionicons name="location" size={14} color={COLORS.textMuted} />
-                              <Text style={styles.examDetailText}>{exam.venue}</Text>
-                            </View>
-                          )}
+                (() => {
+                  const parseTime = (timeStr: string) => {
+                    if (!timeStr) return 0;
+                    const match = timeStr.trim().match(/(\d+):(\d+)\s*(AM|PM)/i);
+                    if (!match) return 0;
+                    let hours = parseInt(match[1]);
+                    const minutes = parseInt(match[2]);
+                    const ampm = match[3].toUpperCase();
+                    if (ampm === 'PM' && hours < 12) hours += 12;
+                    if (ampm === 'AM' && hours === 12) hours = 0;
+                    return hours * 60 + minutes;
+                  };
+
+                  const groupedTimetables = timetables.reduce((acc, exam) => {
+                    const dateStr = exam.exam_date; 
+                    if (!acc[dateStr]) acc[dateStr] = [];
+                    acc[dateStr].push(exam);
+                    return acc;
+                  }, {} as Record<string, any[]>);
+
+                  const sortedDates = Object.keys(groupedTimetables).sort();
+                  const today = new Date();
+                  today.setHours(0,0,0,0);
+
+                  return sortedDates.map(dateStr => {
+                    const exams = groupedTimetables[dateStr].sort((a: any, b: any) => parseTime(a.start_time) - parseTime(b.start_time));
+                    const dateObj = new Date(dateStr);
+                    const isPast = dateObj < today;
+
+                    return (
+                      <View key={dateStr} style={[styles.dateGroup, isPast && { opacity: 0.5 }]}>
+                        <View style={[styles.dateHeader, { backgroundColor: primaryColor + '15' }]}>
+                          <Ionicons name="calendar" size={16} color={primaryColor} />
+                          <Text style={[styles.dateHeaderText, { color: primaryColor }]}>
+                            {dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+                          </Text>
                         </View>
-                        {Boolean(exam.curriculum) && (
-                          <View style={[styles.badge, { backgroundColor: accentColor + '20', marginTop: SPACING.xs, alignSelf: 'flex-start' }]}>
-                            <Text style={[styles.badgeText, { color: accentColor }]}>{exam.curriculum}</Text>
-                          </View>
-                        )}
+                        
+                        <View style={styles.dateExamsContainer}>
+                          {exams.map((exam: any, index: number) => (
+                            <View key={exam.id} style={[styles.examRow, index < exams.length - 1 && styles.examRowBorder]}>
+                              <View style={styles.timeCol}>
+                                <Text style={styles.timeText}>{exam.start_time || 'TBA'}</Text>
+                                {Boolean(exam.duration) && (
+                                  <Text style={styles.durationText}>{exam.duration}</Text>
+                                )}
+                              </View>
+                              
+                              <View style={styles.examInfoCol}>
+                                <Text style={styles.examSubjectText}>{exam.subject_name}</Text>
+                                <View style={styles.examSubRow}>
+                                  <Text style={styles.examPaperText}>{exam.paper_code}</Text>
+                                  {Boolean(exam.curriculum) && (
+                                    <View style={[styles.badge, { backgroundColor: accentColor + '20', paddingVertical: 1, paddingHorizontal: 6 }]}>
+                                      <Text style={[styles.badgeText, { color: accentColor }]}>{exam.curriculum}</Text>
+                                    </View>
+                                  )}
+                                </View>
+                                {Boolean(exam.venue) && (
+                                  <View style={styles.venueRow}>
+                                    <Ionicons name="location" size={12} color={COLORS.textMuted} />
+                                    <Text style={styles.venueText}>{exam.venue}</Text>
+                                  </View>
+                                )}
+                              </View>
+                            </View>
+                          ))}
+                        </View>
                       </View>
-                    </View>
-                  );
-                })
+                    );
+                  });
+                })()
               )}
             </View>
           )}
@@ -279,11 +394,41 @@ export default function SchoolHubScreen() {
           <View style={{ height: 40 }} />
         </ScrollView>
       )}
+      {/* Full Screen Image Modal */}
+      <Modal visible={!!selectedImage} transparent={true} animationType="fade">
+        <View style={styles.modalBackground}>
+          <TouchableOpacity 
+            style={styles.modalCloseButton} 
+            onPress={() => setSelectedImage(null)}
+          >
+            <Ionicons name="close-circle" size={40} color={COLORS.white} />
+          </TouchableOpacity>
+          {selectedImage && (
+            <Image source={selectedImage} style={styles.modalImage} resizeMode="contain" />
+          )}
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
+  modalBackground: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalCloseButton: {
+    position: 'absolute',
+    top: 40,
+    right: 20,
+    zIndex: 100,
+  },
+  modalImage: {
+    width: '100%',
+    height: '100%',
+  },
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
@@ -434,51 +579,76 @@ const styles = StyleSheet.create({
     color: COLORS.textMuted,
     textAlign: 'center',
   },
-  timetableCard: {
+  dateGroup: {
+    marginBottom: SPACING.lg,
     backgroundColor: COLORS.white,
     borderRadius: RADIUS.md,
-    padding: SPACING.md,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
     ...SHADOWS.sm,
+    overflow: 'hidden',
   },
-  examDateBox: {
-    width: 60,
-    height: 70,
-    borderRadius: RADIUS.md,
+  dateHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    gap: SPACING.sm,
+  },
+  dateHeaderText: {
+    ...FONTS.bodyBold,
+  },
+  dateExamsContainer: {
+    paddingHorizontal: SPACING.md,
+  },
+  examRow: {
+    flexDirection: 'row',
+    paddingVertical: SPACING.md,
+  },
+  examRowBorder: {
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  timeCol: {
+    width: 80,
+    borderRightWidth: 2,
+    borderRightColor: COLORS.borderLight,
+    paddingRight: SPACING.md,
+    marginRight: SPACING.md,
     justifyContent: 'center',
   },
-  examDateMonth: {
-    fontSize: 12,
-    fontWeight: '700',
-    marginBottom: 2,
-  },
-  examDateDay: {
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  examSubject: {
+  timeText: {
     ...FONTS.bodyBold,
     color: COLORS.textPrimary,
   },
-  examPaper: {
-    ...FONTS.caption,
-    color: COLORS.textSecondary,
-    marginBottom: SPACING.xs,
+  durationText: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    marginTop: 2,
   },
-  examDetailsRow: {
+  examInfoCol: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  examSubjectText: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  examSubRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.md,
-    flexWrap: 'wrap',
+    gap: SPACING.sm,
+    marginBottom: 4,
   },
-  examDetail: {
+  examPaperText: {
+    ...FONTS.caption,
+    color: COLORS.textSecondary,
+  },
+  venueRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  examDetailText: {
+  venueText: {
     ...FONTS.small,
     color: COLORS.textMuted,
   },
