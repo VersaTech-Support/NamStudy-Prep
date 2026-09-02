@@ -57,14 +57,29 @@ export default function SubjectSelectionModal({ visible, onClose, onEnrollSucces
       const filteredSubs = allSubs.filter(sub => {
         const g = sub.grades as any;
         const gName = Array.isArray(g) ? g[0]?.name : g?.name;
-        return gName && (gName.includes(userGrade) || gName === userGrade || userGrade.includes(gName));
+        if (!gName) return false;
+        
+        // Exact match
+        if (gName === userGrade) return true;
+        
+        // Includes matching
+        if (gName.includes(userGrade) || userGrade.includes(gName)) return true;
+        
+        // Aliases mapping
+        const ugStr = userGrade as string;
+        const isNSSCO = ugStr === 'NSSCO' || ugStr === 'Grade 11' || ugStr === 'Grade 10';
+        const isNSSCAS = ugStr === 'NSSCAS' || ugStr === 'Grade 12';
+        
+        if (isNSSCO && (gName === 'NSSCO' || gName === 'Grade 11' || gName === 'Grade 10')) return true;
+        if (isNSSCAS && (gName === 'NSSCAS' || gName === 'Grade 12')) return true;
+        
+        if (userGrade === 'IGCSE' && gName.includes('IGCSE')) return true;
+        if (userGrade === 'AS Level' && (gName.includes('AS Level') || gName.includes('A Level'))) return true;
+        
+        return false;
       });
       
-      if (filteredSubs.length > 0) {
-        setSubjects(filteredSubs);
-      } else {
-        setSubjects(allSubs);
-      }
+      setSubjects(filteredSubs);
     } catch (err) {
       console.error('Failed to fetch subjects:', err);
     } finally {

@@ -86,12 +86,28 @@ export default function SchoolHubScreen() {
   const accentColor = schoolData?.accent_color || COLORS.accent;
   const schoolName = schoolData?.name || user?.school || 'National Hub';
 
+  // Determine user permissions and grade aliases
+  const isStaff = user?.role === 'admin' || user?.role === 'teacher' || user?.is_school_admin;
+  const userGrade = user?.grade_level || 'NSSCO';
+  const isNSSCO = !userGrade || userGrade.includes('NSSCO') || userGrade.includes('Grade 11') || userGrade.includes('Grade 10') || userGrade.includes('IGCSE');
+  const isNSSCAS = !userGrade || userGrade.includes('NSSCAS') || userGrade.includes('Grade 12') || userGrade.includes('AS Level');
+
+  // Filter timetables based on the curriculum
+  const visibleTimetables = timetables.filter(exam => {
+    if (isStaff) return true;
+    if (!exam.curriculum) return true;
+    if (exam.curriculum === 'NSSCO' && isNSSCO) return true;
+    if (exam.curriculum === 'NSSCAS' && isNSSCAS) return true;
+    if (exam.curriculum === userGrade) return true;
+    return false;
+  });
+
   // Calculate countdown for the next upcoming exam
   const now = new Date();
   now.setHours(0, 0, 0, 0); // Normalize to start of day for accurate day counting
   
   // Only consider exams for subjects the user is actually taking (if we have that data)
-  const upcomingExams = timetables.filter(t => {
+  const upcomingExams = visibleTimetables.filter(t => {
     const isFuture = new Date(t.exam_date) >= now;
     if (enrolledSubjects.length === 0) return isFuture; // Fallback if no enrolled subjects
     return isFuture && enrolledSubjects.includes(t.subject_name);
@@ -251,10 +267,8 @@ export default function SchoolHubScreen() {
             <View style={styles.tabSection}>
               {/* Official Timetable Image Galleries */}
               {(() => {
-                const isStaff = user?.role === 'admin' || user?.role === 'teacher' || (user as any)?.is_admin;
-                const grade = user?.grade_level || '';
-                const showNSSCO = isStaff || grade.includes('NSSCO') || grade.includes('IGCSE') || !grade;
-                const showNSSCAS = isStaff || grade.includes('NSSCAS') || grade.includes('AS Level') || !grade;
+                const showNSSCO = isStaff || isNSSCO;
+                const showNSSCAS = isStaff || isNSSCAS;
 
                 return (
                   <>
@@ -308,7 +322,7 @@ export default function SchoolHubScreen() {
               <View style={styles.divider} />
               
               <Text style={[styles.sectionHeaderTitle, { marginBottom: SPACING.md }]}>Upcoming Exam Schedule</Text>
-              {timetables.length === 0 ? (
+              {visibleTimetables.length === 0 ? (
                 <View style={styles.emptyContainer}>
                   <Ionicons name="calendar-outline" size={48} color={COLORS.textMuted} />
                   <Text style={styles.emptyText}>No upcoming exams</Text>
@@ -328,7 +342,7 @@ export default function SchoolHubScreen() {
                     return hours * 60 + minutes;
                   };
 
-                  const groupedTimetables = timetables.reduce((acc, exam) => {
+                  const groupedTimetables = visibleTimetables.reduce((acc, exam) => {
                     const dateStr = exam.exam_date; 
                     if (!acc[dateStr]) acc[dateStr] = [];
                     acc[dateStr].push(exam);
