@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
-  Platform
+  Platform,
+  Linking
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -30,6 +31,8 @@ export default function CurriculumSubjectScreen() {
   const [subject, setSubject] = useState<Subject | null>(null);
   const [sections, setSections] = useState<SectionWithTopics[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingSyllabus, setUploadingSyllabus] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     if (id) fetchSubjectData();
@@ -205,6 +208,93 @@ export default function CurriculumSubjectScreen() {
     }
   };
 
+  // ─── Syllabus PDF handlers ─────────────────────────────────────────
+  const handleUploadSyllabus = async (file: File) => {
+    try {
+      setUploadingSyllabus(true);
+      const subjectName = (subject?.name || 'subject').replace(/\s+/g, '_');
+      const fileName = `${subjectName}_syllabus_${Date.now()}.pdf`;
+
+      const arrayBuffer = await file.arrayBuffer();
+
+      const { error: uploadError } = await supabase.storage
+        .from('syllabi')
+        .upload(fileName, arrayBuffer, {
+          contentType: 'application/pdf',
+          upsert: true,
+        });
+
+      if (uploadError) throw uploadError;
+
+      const { data } = supabase.storage.from('syllabi').getPublicUrl(fileName);
+
+      const { error: updateError } = await supabase
+        .from('curriculum_subjects')
+        .update({ syllabus_url: data.publicUrl })
+        .eq('id', id as string);
+
+      if (updateError) throw updateError;
+
+      setSubject(prev => prev ? { ...prev, syllabus_url: data.publicUrl } : prev);
+      if (Platform.OS === 'web') window.alert('Syllabus uploaded successfully!');
+      else Alert.alert('Success', 'Syllabus uploaded successfully!');
+    } catch (e: any) {
+      console.error(e);
+      const msg = 'Failed to upload syllabus: ' + e.message;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    } finally {
+      setUploadingSyllabus(false);
+    }
+  };
+
+  const handleRemoveSyllabus = async () => {
+    const doRemove = Platform.OS === 'web'
+      ? window.confirm('Remove the syllabus PDF from this subject?')
+      : await new Promise<boolean>(resolve =>
+          Alert.alert('Remove Syllabus', 'Remove the syllabus PDF from this subject?', [
+            { text: 'Cancel', onPress: () => resolve(false) },
+            { text: 'Remove', style: 'destructive', onPress: () => resolve(true) },
+          ])
+        );
+
+    if (!doRemove) return;
+
+    try {
+      const { error } = await supabase
+        .from('curriculum_subjects')
+        .update({ syllabus_url: null })
+        .eq('id', id as string);
+
+      if (error) throw error;
+      setSubject(prev => prev ? { ...prev, syllabus_url: null } : prev);
+    } catch (e: any) {
+      const msg = 'Failed to remove syllabus: ' + e.message;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    }
+  };
+
+  const triggerFilePicker = () => {
+    if (Platform.OS === 'web') {
+      // Create or reuse a hidden file input
+      if (!fileInputRef.current) {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = 'application/pdf';
+        input.style.display = 'none';
+        input.onchange = (e: any) => {
+          const file = e.target?.files?.[0];
+          if (file) handleUploadSyllabus(file);
+          input.value = ''; // reset so same file can be picked again
+        };
+        document.body.appendChild(input);
+        fileInputRef.current = input;
+      }
+      fileInputRef.current.click();
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -227,6 +317,61 @@ export default function CurriculumSubjectScreen() {
         <TouchableOpacity style={styles.headerBtn} onPress={handleCreateSection}>
           <Ionicons name="add-circle" size={24} color={COLORS.primary} />
         </TouchableOpacity>
+      </View>
+
+      {/* Syllabus PDF Card */}
+      <View style={styles.syllabusCard}>
+        <View style={styles.syllabusLeft}>
+          <Ionicons
+            name={subject?.syllabus_url ? 'document-text' : 'document-text-outline'}
+            size={22}
+            color={subject?.syllabus_url ? COLORS.green : COLORS.textMuted}
+          />
+          <View style={{ marginLeft: SPACING.md, flex: 1 }}>
+            <Text style={styles.syllabusTitle}>Syllabus PDF</Text>
+            <Text style={styles.syllabusStatus}>
+              {subject?.syllabus_url ? 'Uploaded' : 'No syllabus attached'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.syllabusActions}>
+          {subject?.syllabus_url ? (
+            <>
+              <TouchableOpacity
+                style={styles.syllabusBtn}
+                onPress={() => {
+                  if (Platform.OS === 'web') window.open(subject.syllabus_url!, '_blank');
+                  else Linking.openURL(subject.syllabus_url!);
+                }}
+              >
+                <Ionicons name="eye-outline" size={16} color={COLORS.accent} />
+                <Text style={[styles.syllabusBtnText, { color: COLORS.accent }]}>View</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.syllabusBtn} onPress={triggerFilePicker}>
+                <Ionicons name="swap-horizontal" size={16} color={COLORS.gold} />
+                <Text style={[styles.syllabusBtnText, { color: COLORS.gold }]}>Replace</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.syllabusBtn} onPress={handleRemoveSyllabus}>
+                <Ionicons name="trash-outline" size={16} color={COLORS.red} />
+              </TouchableOpacity>
+            </>
+          ) : (
+            <TouchableOpacity
+              style={[styles.syllabusUploadBtn, uploadingSyllabus && { opacity: 0.5 }]}
+              onPress={triggerFilePicker}
+              disabled={uploadingSyllabus}
+            >
+              {uploadingSyllabus ? (
+                <ActivityIndicator size="small" color={COLORS.primary} />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={16} color={COLORS.primary} />
+                  <Text style={styles.syllabusUploadText}>Upload PDF</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       <ScrollView style={styles.list} contentContainerStyle={{ paddingBottom: 40 }}>
@@ -503,5 +648,63 @@ const styles = StyleSheet.create({
   createBtnText: {
     ...FONTS.bodyBold,
     color: COLORS.white,
+  },
+  // Syllabus card styles
+  syllabusCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginHorizontal: SPACING.lg,
+    marginTop: SPACING.md,
+    padding: SPACING.md,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    ...SHADOWS.sm,
+  },
+  syllabusLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  syllabusTitle: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+  },
+  syllabusStatus: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    marginTop: 1,
+  },
+  syllabusActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.xs,
+  },
+  syllabusBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.sm,
+    paddingVertical: 6,
+    gap: 4,
+  },
+  syllabusBtnText: {
+    ...FONTS.small,
+    fontWeight: '600',
+  },
+  syllabusUploadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.md,
+    paddingVertical: 8,
+    borderRadius: RADIUS.sm,
+    backgroundColor: COLORS.primary + '10',
+    gap: 6,
+  },
+  syllabusUploadText: {
+    ...FONTS.bodyBold,
+    color: COLORS.primary,
+    fontSize: 13,
   }
 });

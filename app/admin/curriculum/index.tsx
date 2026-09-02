@@ -8,6 +8,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -22,11 +24,43 @@ interface GradeWithSubjects extends Grade {
   subjects: Subject[];
 }
 
+// Grade definitions for Namibian system
+const GRADE_DEFS = [
+  { name: 'Grade 11', code: 'NSSCO', currCode: 'NSSCO', currName: 'Namibia Senior Secondary Certificate (Ordinary)', levelOrder: 11 },
+  { name: 'Grade 12', code: 'NSSCAS', currCode: 'NSSCAS', currName: 'Namibia Senior Secondary Certificate (Advanced Subsidiary)', levelOrder: 12 },
+];
+
+// Icon + color mapping for known Namibian subjects
+const SUBJECT_META: Record<string, { icon: string; color: string }> = {
+  'Mathematics':       { icon: 'calculator',      color: '#3B82F6' },
+  'Biology':           { icon: 'leaf',             color: '#10B981' },
+  'Chemistry':         { icon: 'flask',            color: '#8B5CF6' },
+  'Physics':           { icon: 'pulse',            color: '#F59E0B' },
+  'Computer Science':  { icon: 'code-slash',       color: '#06B6D4' },
+  'English':           { icon: 'text',             color: '#EC4899' },
+  'Geography':         { icon: 'globe',            color: '#14B8A6' },
+  'History':           { icon: 'time',             color: '#A78BFA' },
+  'Accounting':        { icon: 'cash',             color: '#059669' },
+  'Business Studies':  { icon: 'briefcase',        color: '#D97706' },
+  'Economics':         { icon: 'trending-up',      color: '#EF4444' },
+  'Art':               { icon: 'color-palette',    color: '#F472B6' },
+  'Music':             { icon: 'musical-notes',    color: '#7C3AED' },
+  'Woodwork':          { icon: 'hammer',           color: '#92400E' },
+  'Agriculture':       { icon: 'nutrition',        color: '#65A30D' },
+};
+
 export default function CurriculumIndexScreen() {
   const router = useRouter();
   const [grades, setGrades] = useState<GradeWithSubjects[]>([]);
   const [ungradedSubjects, setUngradedSubjects] = useState<Subject[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Modal state
+  const [modalVisible, setModalVisible] = useState(false);
+  const [legacySubjects, setLegacySubjects] = useState<string[]>([]);
+  const [gradeIds, setGradeIds] = useState<Record<string, string>>({}); // code -> gradeId
+  const [existingMap, setExistingMap] = useState<Record<string, Set<string>>>({}); // gradeCode -> Set of subject names
+  const [saving, setSaving] = useState<string | null>(null); // "SubjectName|GradeCode" currently saving
 
   useEffect(() => {
     fetchCurriculumData();
@@ -69,75 +103,147 @@ export default function CurriculumIndexScreen() {
     }
   };
 
-  const handleCreateTestCurriculum = async () => {
+  // ─── Ensure grades exist and open modal ───────────────────────────
+  const openManageModal = async () => {
     try {
-      setLoading(true);
+      // 1. Fetch legacy subjects
+      const { data: legacySubs, error: legErr } = await supabase
+        .from('subjects')
+        .select('name')
+        .order('name');
+      if (legErr) throw legErr;
+      if (!legacySubs || legacySubs.length === 0) {
+        const msg = 'No subjects found in the legacy "subjects" table.';
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('Info', msg);
+        return;
+      }
+      setLegacySubjects(legacySubs.map(s => s.name));
 
-      // 1. Find or create the NSSCAS curriculum
-      let curriculumId: string;
-      const { data: existingCurricula } = await supabase
-        .from('curricula')
-        .select('id')
-        .eq('code', 'NSSCAS')
-        .limit(1);
-      
-      if (existingCurricula && existingCurricula.length > 0) {
-        curriculumId = existingCurricula[0].id;
-      } else {
-        const { data: newCurriculum, error: currError } = await supabase
+      // 2. Ensure curricula and grades exist for each GRADE_DEF
+      const resolvedGradeIds: Record<string, string> = {};
+      for (const def of GRADE_DEFS) {
+        // Find or create curriculum
+        let curriculumId: string;
+        const { data: existCurr } = await supabase
           .from('curricula')
-          .insert({ code: 'NSSCAS', name: 'Namibia Senior Secondary Certificate (Advanced Subsidiary)' })
-          .select()
-          .single();
-        if (currError) throw currError;
-        curriculumId = newCurriculum.id;
-      }
+          .select('id')
+          .eq('code', def.currCode)
+          .limit(1);
 
-      // 2. Find or create Grade 12 under that curriculum
-      let gradeId: string;
-      const { data: existingGrades } = await supabase
-        .from('grades')
-        .select('id')
-        .eq('curriculum_id', curriculumId)
-        .eq('name', 'Grade 12')
-        .limit(1);
-      
-      if (existingGrades && existingGrades.length > 0) {
-        gradeId = existingGrades[0].id;
-      } else {
-        const { data: newGrade, error: gradeError } = await supabase
+        if (existCurr && existCurr.length > 0) {
+          curriculumId = existCurr[0].id;
+        } else {
+          const { data: newCurr, error: cErr } = await supabase
+            .from('curricula')
+            .insert({ code: def.currCode, name: def.currName })
+            .select()
+            .single();
+          if (cErr) throw cErr;
+          curriculumId = newCurr.id;
+        }
+
+        // Find or create grade
+        const { data: existGrade } = await supabase
           .from('grades')
-          .insert({ name: 'Grade 12', code: 'NSSCAS', curriculum_id: curriculumId, level_order: 12 })
-          .select()
-          .single();
-        if (gradeError) throw gradeError;
-        gradeId = newGrade.id;
-      }
+          .select('id')
+          .eq('curriculum_id', curriculumId)
+          .eq('name', def.name)
+          .limit(1);
 
-      // 3. Create TEST BIOLOGY subject under that grade
-      const { error: subError } = await supabase
-        .from('curriculum_subjects')
-        .insert({ 
-           grade_id: gradeId,
-           name: 'TEST BIOLOGY',
-           sequence_order: 1,
-           icon: 'flask',
-           color: COLORS.primary
-        });
-        
-      if (subError) throw subError;
-      
-      // Reload
-      await fetchCurriculumData();
+        if (existGrade && existGrade.length > 0) {
+          resolvedGradeIds[def.code] = existGrade[0].id;
+        } else {
+          const { data: newGrade, error: gErr } = await supabase
+            .from('grades')
+            .insert({ name: def.name, code: def.code, curriculum_id: curriculumId, level_order: def.levelOrder })
+            .select()
+            .single();
+          if (gErr) throw gErr;
+          resolvedGradeIds[def.code] = newGrade.id;
+        }
+      }
+      setGradeIds(resolvedGradeIds);
+
+      // 3. Fetch which subjects already exist under each grade
+      const existMap: Record<string, Set<string>> = {};
+      for (const def of GRADE_DEFS) {
+        const gId = resolvedGradeIds[def.code];
+        const { data: existSubs } = await supabase
+          .from('curriculum_subjects')
+          .select('name')
+          .eq('grade_id', gId);
+        existMap[def.code] = new Set((existSubs || []).map(s => s.name));
+      }
+      setExistingMap(existMap);
+
+      setModalVisible(true);
     } catch (e: any) {
       console.error(e);
-      if (Platform.OS === 'web') {
-        window.alert('Failed to create test data: ' + e.message);
-      } else {
-        Alert.alert('Error', 'Failed to create test data: ' + e.message);
-      }
-      setLoading(false);
+      const msg = 'Failed to load subjects: ' + e.message;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
     }
+  };
+
+  // ─── Toggle a subject for a grade ─────────────────────────────────
+  const handleToggle = async (subjectName: string, gradeCode: string, currentlyOn: boolean) => {
+    const savingKey = `${subjectName}|${gradeCode}`;
+    setSaving(savingKey);
+
+    try {
+      const gId = gradeIds[gradeCode];
+
+      if (currentlyOn) {
+        // Remove the subject from this grade
+        const { error } = await supabase
+          .from('curriculum_subjects')
+          .delete()
+          .eq('grade_id', gId)
+          .eq('name', subjectName);
+        if (error) throw error;
+
+        setExistingMap(prev => {
+          const updated = { ...prev };
+          const set = new Set(updated[gradeCode]);
+          set.delete(subjectName);
+          updated[gradeCode] = set;
+          return updated;
+        });
+      } else {
+        // Add the subject to this grade
+        const meta = SUBJECT_META[subjectName] || { icon: 'book', color: COLORS.primary };
+        const { error } = await supabase
+          .from('curriculum_subjects')
+          .insert({
+            grade_id: gId,
+            name: subjectName,
+            icon: meta.icon,
+            color: meta.color,
+          });
+        if (error) throw error;
+
+        setExistingMap(prev => {
+          const updated = { ...prev };
+          const set = new Set(updated[gradeCode]);
+          set.add(subjectName);
+          updated[gradeCode] = set;
+          return updated;
+        });
+      }
+    } catch (e: any) {
+      console.error(e);
+      const msg = `Failed to update ${subjectName}: ${e.message}`;
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('Error', msg);
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const closeModal = () => {
+    setModalVisible(false);
+    fetchCurriculumData(); // refresh the main list
   };
 
   if (loading) {
@@ -150,9 +256,15 @@ export default function CurriculumIndexScreen() {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      <Text style={styles.pageDescription}>
-        Select a subject to manage its sections, topics, and content blocks.
-      </Text>
+      <View style={styles.pageHeader}>
+        <Text style={styles.pageDescription}>
+          Select a subject to manage its sections, topics, and content blocks.
+        </Text>
+        <TouchableOpacity style={styles.manageBtn} onPress={openManageModal}>
+          <Ionicons name="settings-outline" size={18} color={COLORS.white} />
+          <Text style={styles.manageBtnText}>Manage Subjects</Text>
+        </TouchableOpacity>
+      </View>
 
       {grades.length === 0 && ungradedSubjects.length === 0 ? (
         <View style={styles.emptyStateContainer}>
@@ -162,11 +274,11 @@ export default function CurriculumIndexScreen() {
             There are no grades or subjects in the database.
           </Text>
           <TouchableOpacity 
-            style={[styles.addSubjectBtn, { alignSelf: 'center', marginTop: SPACING.md }]}
-            onPress={handleCreateTestCurriculum}
+            style={[styles.manageBtn, { marginTop: SPACING.md }]}
+            onPress={openManageModal}
           >
-            <Ionicons name="add" size={20} color={COLORS.primary} />
-            <Text style={styles.addSubjectText}>Add Grade/Subject</Text>
+            <Ionicons name="add-circle-outline" size={20} color={COLORS.white} />
+            <Text style={styles.manageBtnText}>Add Subjects</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -204,14 +316,6 @@ export default function CurriculumIndexScreen() {
                     </TouchableOpacity>
                   ))
                 )}
-                
-                <TouchableOpacity 
-                  style={styles.addSubjectBtn}
-                  onPress={handleCreateTestCurriculum}
-                >
-                  <Ionicons name="add" size={20} color={COLORS.primary} />
-                  <Text style={styles.addSubjectText}>Add Subject</Text>
-                </TouchableOpacity>
               </View>
             </View>
           ))}
@@ -251,6 +355,81 @@ export default function CurriculumIndexScreen() {
         </>
       )}
       <View style={{ height: 40 }} />
+
+      {/* ─── Subject Management Modal ─────────────────────────────── */}
+      <Modal
+        visible={modalVisible}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={closeModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* Modal Header */}
+            <View style={styles.modalHeader}>
+              <View>
+                <Text style={styles.modalTitle}>Manage Subjects</Text>
+                <Text style={styles.modalSubtitle}>
+                  Toggle which grades each subject belongs to
+                </Text>
+              </View>
+              <TouchableOpacity onPress={closeModal} style={styles.modalClose}>
+                <Ionicons name="close" size={24} color={COLORS.textPrimary} />
+              </TouchableOpacity>
+            </View>
+
+            {/* Column Headers */}
+            <View style={styles.modalTableHeader}>
+              <Text style={styles.modalColSubject}>Subject</Text>
+              {GRADE_DEFS.map(def => (
+                <Text key={def.code} style={styles.modalColGrade}>{def.code}</Text>
+              ))}
+            </View>
+
+            {/* Subject Rows */}
+            <ScrollView style={styles.modalList} showsVerticalScrollIndicator={false}>
+              {legacySubjects.map(name => {
+                const meta = SUBJECT_META[name] || { icon: 'book', color: COLORS.primary };
+                return (
+                  <View key={name} style={styles.modalRow}>
+                    <View style={styles.modalRowLeft}>
+                      <View style={[styles.modalRowIcon, { backgroundColor: meta.color + '15' }]}>
+                        <Ionicons name={(meta.icon as any)} size={18} color={meta.color} />
+                      </View>
+                      <Text style={styles.modalRowName}>{name}</Text>
+                    </View>
+                    <View style={styles.modalRowToggles}>
+                      {GRADE_DEFS.map(def => {
+                        const isOn = existingMap[def.code]?.has(name) ?? false;
+                        const isSaving = saving === `${name}|${def.code}`;
+                        return (
+                          <View key={def.code} style={styles.modalToggleCell}>
+                            {isSaving ? (
+                              <ActivityIndicator size="small" color={COLORS.primary} />
+                            ) : (
+                              <Switch
+                                value={isOn}
+                                onValueChange={() => handleToggle(name, def.code, isOn)}
+                                trackColor={{ false: COLORS.borderLight, true: COLORS.primary + '60' }}
+                                thumbColor={isOn ? COLORS.primary : '#f4f3f4'}
+                              />
+                            )}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+
+            {/* Done Button */}
+            <TouchableOpacity style={styles.modalDoneBtn} onPress={closeModal}>
+              <Text style={styles.modalDoneBtnText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </ScrollView>
   );
 }
@@ -268,10 +447,32 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  pageHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: SPACING.xl,
+    gap: SPACING.md,
+  },
   pageDescription: {
     ...FONTS.body,
     color: COLORS.textSecondary,
-    marginBottom: SPACING.xl,
+    flex: 1,
+  },
+  manageBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.md,
+    paddingVertical: SPACING.sm,
+    borderRadius: RADIUS.md,
+    gap: 6,
+    ...SHADOWS.sm,
+  },
+  manageBtnText: {
+    ...FONTS.bodyBold,
+    color: COLORS.white,
+    fontSize: 13,
   },
   emptyStateContainer: {
     padding: SPACING.xl,
@@ -349,21 +550,113 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     paddingVertical: SPACING.sm,
   },
-  addSubjectBtn: {
+  // ─── Modal Styles ─────────────────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: SPACING.lg,
+  },
+  modalContent: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '85%',
+    ...SHADOWS.lg,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    padding: SPACING.lg,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
+  },
+  modalTitle: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+  },
+  modalSubtitle: {
+    ...FONTS.small,
+    color: COLORS.textSecondary,
+    marginTop: 2,
+  },
+  modalClose: {
+    padding: 4,
+  },
+  modalTableHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.primary + '40',
-    borderStyle: 'dashed',
-    borderRadius: RADIUS.md,
-    marginTop: SPACING.xs,
-    backgroundColor: COLORS.primary + '05',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    backgroundColor: COLORS.background,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
-  addSubjectText: {
+  modalColSubject: {
+    ...FONTS.caption,
+    color: COLORS.textMuted,
+    flex: 1,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  modalColGrade: {
+    ...FONTS.caption,
+    color: COLORS.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    width: 80,
+    textAlign: 'center',
+  },
+  modalList: {
+    flex: 1,
+  },
+  modalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: SPACING.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight + '80',
+  },
+  modalRowLeft: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+  },
+  modalRowIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalRowName: {
+    ...FONTS.body,
+    color: COLORS.textPrimary,
+  },
+  modalRowToggles: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  modalToggleCell: {
+    width: 80,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  modalDoneBtn: {
+    margin: SPACING.lg,
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.md,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+  },
+  modalDoneBtnText: {
     ...FONTS.bodyBold,
-    color: COLORS.primary,
-    marginLeft: SPACING.xs,
-  }
+    color: COLORS.white,
+  },
 });

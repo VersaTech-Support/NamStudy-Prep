@@ -24,7 +24,7 @@ export const COLORS = {
   
   // Neutrals
   white: '#FFFFFF',
-  background: '#F8FAFC',
+  background: '#F7F7FB',
   surface: '#FFFFFF',
   surfaceAlt: '#F1F5F9',
   border: '#E2E8F0',
@@ -51,31 +51,19 @@ export const GRADIENTS = {
 
 export const SHADOWS = {
   sm: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 2,
+    boxShadow: '0px 1px 2px 0px rgba(0, 0, 0, 0.05)',
     elevation: 1,
   },
   md: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    boxShadow: '0px 2px 4px 0px rgba(0, 0, 0, 0.1)',
     elevation: 3,
   },
   lg: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 8,
+    boxShadow: '0px 4px 8px 0px rgba(0, 0, 0, 0.15)',
     elevation: 5,
   },
   xl: {
-    shadowColor: '#7C3AED',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.2,
-    shadowRadius: 12,
+    boxShadow: '0px 6px 12px 0px rgba(124, 58, 237, 0.2)',
     elevation: 8,
   },
 };

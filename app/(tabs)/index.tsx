@@ -15,27 +15,24 @@ import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 
 // Reusable Components
-import ScreenHeader from '@/components/ui/ScreenHeader';
-import SectionHeader from '@/components/ui/SectionHeader';
 import EmptyState from '@/components/ui/EmptyState';
 import LoadingState from '@/components/ui/LoadingState';
 import ProgressBar from '@/components/ui/ProgressBar';
-import GradientCard from '@/components/ui/GradientCard';
 import PremiumBadge from '@/components/ui/PremiumBadge';
 import AuthModal from '@/components/AuthModal';
 
 import { getUserMastery } from '@/lib/learning/mastery';
 import { getNextBestActions } from '@/lib/learning/recommendations';
 import { SubjectMastery, StudyRecommendation, TopicMastery } from '@/lib/learning/types';
-import RecommendationCard from '@/components/ui/RecommendationCard';
 import SubjectSelectionModal from '@/components/SubjectSelectionModal';
 
-import { LinearGradient } from 'expo-linear-gradient';
 import { FEATURES } from '@/constants/features';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function HomeScreen() {
   const { user, isPro, streak } = useUser();
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   
   const [authVisible, setAuthVisible] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -51,6 +48,9 @@ export default function HomeScreen() {
   // Subject Enrollment
   const [enrolledSubjects, setEnrolledSubjects] = useState<any[]>([]);
   const [subjectModalVisible, setSubjectModalVisible] = useState(false);
+
+  // Continue Reading (last viewed notes)
+  const [lastViewedTopic, setLastViewedTopic] = useState<{ topicId: string; topicName: string; progressPercent: number; subjectName: string } | null>(null);
 
   // Exam Countdown (Assume Nov 1st of current year)
   const daysToExam = React.useMemo(() => {
@@ -122,6 +122,25 @@ export default function HomeScreen() {
         
       if (ssError) console.error('Error fetching student subjects:', ssError);
       if (studentSubjects) setEnrolledSubjects(studentSubjects);
+
+      // Fetch last viewed topic from content progress
+      const { data: lastViewed } = await supabase
+        .from('student_content_progress')
+        .select('topic_id, progress_percent, topics(name, curriculum_subjects:subject_id(name))')
+        .eq('user_id', user?.id || '')
+        .order('last_viewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (lastViewed) {
+        const topicData = lastViewed.topics as any;
+        setLastViewedTopic({
+          topicId: lastViewed.topic_id,
+          progressPercent: lastViewed.progress_percent || 0,
+          topicName: topicData?.name || 'Unknown Topic',
+          subjectName: topicData?.curriculum_subjects?.name || '',
+        });
+      }
       
     } catch (err) {
       console.error('Failed to fetch authenticated data:', err);
@@ -129,207 +148,265 @@ export default function HomeScreen() {
     setLoading(false);
   };
 
-  const getProgressColor = (percentage: number) => {
-    if (percentage >= 80) return COLORS.green;
-    if (percentage >= 50) return COLORS.gold;
-    return COLORS.red;
+  // ─── Get greeting based on time of day ────────────────────────────
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 17) return 'Good afternoon';
+    return 'Good evening';
   };
 
+  // ─── Determine the best "continue learning" item ──────────────────
+  const getContinueLearningData = () => {
+    // Prefer notes progress over quiz mastery
+    if (lastViewedTopic && lastViewedTopic.progressPercent < 100) {
+      return {
+        title: lastViewedTopic.topicName,
+        subtitle: lastViewedTopic.subjectName,
+        progress: lastViewedTopic.progressPercent,
+        onPress: () => router.push(`/topic/${lastViewedTopic.topicId}/notes` as any),
+      };
+    }
+    if (recentTopic) {
+      return {
+        title: recentTopic.topic_name,
+        subtitle: 'Recent quiz activity',
+        progress: recentTopic.masteryScore,
+        onPress: () => recentTopic.topic_id
+          ? router.push(`/topic/${recentTopic.topic_id}`)
+          : router.push({ pathname: '/quiz/[topic]', params: { topic: recentTopic.topic_name, gradeLevel: user?.grade_level || 'NSSCO' } }),
+      };
+    }
+    return null;
+  };
+
+  // ─── Quick Access items matching Figma ────────────────────────────
+  const quickAccessItems = [
+    {
+      icon: 'chatbubbles-outline' as const,
+      title: 'AI Tutor',
+      subtitle: 'Ask NamTutor',
+      color: '#10B981',
+      onPress: () => { if (FEATURES.ENABLE_NAMTUTOR) router.push('/tutor'); },
+      disabled: !FEATURES.ENABLE_NAMTUTOR,
+    },
+    {
+      icon: 'albums-outline' as const,
+      title: 'Flashcards',
+      subtitle: 'Review & remember',
+      color: '#10B981',
+      onPress: () => router.push('/flashcards'),
+    },
+    {
+      icon: 'fitness-outline' as const,
+      title: 'Target Test',
+      subtitle: 'Practice weak topics',
+      color: '#10B981',
+      onPress: () => router.push('/target-test' as any),
+      disabled: !FEATURES.ENABLE_TARGET_TEST,
+    },
+    {
+      icon: 'calendar-outline' as const,
+      title: 'Study Planner',
+      subtitle: 'Plan your session',
+      color: '#10B981',
+      onPress: () => router.push('/planner' as any),
+      disabled: !FEATURES.ENABLE_STUDY_PLANNER,
+    },
+    {
+      icon: 'help-circle-outline' as const,
+      title: 'Quick Quiz',
+      subtitle: '10 questions',
+      color: '#10B981',
+      onPress: () => router.push('/quizzes'),
+    },
+    {
+      icon: 'document-text-outline' as const,
+      title: 'Mock Exams',
+      subtitle: 'Exam mode',
+      color: '#10B981',
+      onPress: () => router.push('/mock-exams' as any),
+      disabled: !FEATURES.ENABLE_MOCK_EXAMS,
+    },
+  ];
+
+  // ═══════════════════════════════════════════════════════════════════
+  // AUTHENTICATED RENDER
+  // ═══════════════════════════════════════════════════════════════════
   const renderAuthenticated = () => {
     if (loading) return <LoadingState text="Loading your study center..." />;
 
+    const continueData = getContinueLearningData();
+    const topRec = recommendations.length > 0 ? recommendations[0] : null;
+
     return (
-      <ScrollView showsVerticalScrollIndicator={false}>
-        <ScreenHeader 
-          title={`Hello, ${user?.name?.split(' ')[0] || 'Student'}`} 
-          subtitle="Ready to study?"
-          rightComponent={
-             <TouchableOpacity onPress={() => router.push('/profile')}>
-               {user?.avatar_url ? (
-                 <Image source={{ uri: user.avatar_url }} style={styles.headerAvatar} />
-               ) : (
-                 <Ionicons name="person-circle" size={32} color={COLORS.white} />
-               )}
-             </TouchableOpacity>
-          }
-        />
-
-        {/* Streak & Countdown Widget */}
-        <View style={styles.authWidgetContainer}>
-          <View style={styles.authWidgetCard}>
-            <View style={styles.authWidgetItem}>
-              <View style={[styles.authWidgetIconBg, { backgroundColor: COLORS.goldLight }]}>
-                <Ionicons name="flame" size={24} color={COLORS.goldDark} />
-              </View>
-              <View>
-                <Text style={styles.authWidgetValue}>{streak} {streak === 1 ? 'Day' : 'Days'}</Text>
-                <Text style={styles.authWidgetLabel}>Study Streak</Text>
-              </View>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={{ paddingBottom: 40 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* ─── Header ──────────────────────────────────────────────── */}
+        <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}>
+          <View style={{ flex: 1 }}>
+            <View style={styles.greetingRow}>
+              <Text style={styles.greeting}>{getGreeting()} 👋</Text>
+              {streak > 0 && (
+                <View style={styles.streakPill}>
+                  <Ionicons name="flame" size={14} color="#F59E0B" />
+                  <Text style={styles.streakText}>{streak} day streak</Text>
+                </View>
+              )}
             </View>
-            <View style={styles.authWidgetDivider} />
-            <View style={styles.authWidgetItem}>
-              <View style={[styles.authWidgetIconBg, { backgroundColor: COLORS.primaryLight + '30' }]}>
-                <Ionicons name="calendar" size={24} color={COLORS.primary} />
-              </View>
-              <View>
-                <Text style={styles.authWidgetValue}>{daysToExam} Days</Text>
-                <Text style={styles.authWidgetLabel}>Until Exams</Text>
-              </View>
-            </View>
+            <Text style={styles.gradeContext}>
+              {user?.grade_level ? `Namibia • ${user.grade_level}` : 'Namibia • NSSCO'}
+            </Text>
           </View>
         </View>
 
-        <View style={styles.section}>
-          <SectionHeader title="Continue Studying" />
-          {recentTopic ? (
-            <GradientCard gradient={GRADIENTS.primary} onPress={() => recentTopic.topic_id ? router.push(`/topic/${recentTopic.topic_id}`) : router.push({ pathname: '/quiz/[topic]', params: { topic: recentTopic.topic_name, gradeLevel: user?.grade_level || 'NSSCO' } })}>
-               <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                 <View style={{ flex: 1 }}>
-                   <Text style={{ ...FONTS.caption, color: COLORS.white, opacity: 0.8 }}>Latest Activity</Text>
-                   <Text style={{ ...FONTS.h3, color: COLORS.white, marginVertical: 4 }}>{recentTopic.topic_name}</Text>
-                   <Text style={{ ...FONTS.small, color: COLORS.white, opacity: 0.8 }}>Recent Mastery: {recentTopic.masteryScore}%</Text>
-                 </View>
-                 <Ionicons name="play-circle" size={40} color={COLORS.white} />
-               </View>
-            </GradientCard>
+        {/* ─── Continue Learning Card ──────────────────────────────── */}
+        <View style={styles.sectionPadded}>
+          {continueData ? (
+            <TouchableOpacity
+              style={styles.continueLearningCard}
+              onPress={continueData.onPress}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.continueLearningLabel}>CONTINUE LEARNING</Text>
+              <Text style={styles.continueLearningTitle}>{continueData.title}</Text>
+              <Text style={styles.continueLearningSubtitle}>{continueData.subtitle}</Text>
+              <View style={styles.continueLearningProgress}>
+                <View style={styles.continueLearningBarBg}>
+                  <View
+                    style={[
+                      styles.continueLearningBarFill,
+                      { width: `${continueData.progress}%` },
+                    ]}
+                  />
+                </View>
+                <Text style={styles.continueLearningPercent}>
+                  {continueData.progress}% mastered
+                </Text>
+              </View>
+            </TouchableOpacity>
           ) : (
-            <EmptyState 
-              icon="rocket-outline"
-              title="Let's get started!" 
-              description="You haven't completed any quizzes yet. Take your first quiz to kickstart your progress."
-              actionText="Start a Quiz"
-              onAction={() => router.push('/quizzes')}
-              style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
-            />
+            <TouchableOpacity
+              style={styles.continueLearningCard}
+              onPress={() => router.push('/learn' as any)}
+              activeOpacity={0.7}
+            >
+              <Text style={styles.continueLearningLabel}>GET STARTED</Text>
+              <Text style={styles.continueLearningTitle}>Start learning</Text>
+              <Text style={styles.continueLearningSubtitle}>
+                Browse your subjects and start a topic
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 
-        <View style={styles.section}>
-          <SectionHeader 
-            title="Your Subjects" 
-            actionText="Add Course" 
-            onAction={() => setSubjectModalVisible(true)} 
-          />
-          {enrolledSubjects.length > 0 ? (
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: SPACING.md }}>
-              {enrolledSubjects.map((enrollment) => {
-                const subject = enrollment.curriculum_subjects;
-                if (!subject) return null;
-                const gradeName = subject.grades?.name || '';
-                
-                return (
-                  <TouchableOpacity 
-                    key={enrollment.id} 
-                    style={[styles.subjectCard, { marginRight: SPACING.md }]}
-                    onPress={() => router.push(`/subject/${subject.id}` as any)}
-                  >
-                    <View style={[styles.subjectIconBg, { backgroundColor: subject.color || COLORS.primary }]}>
-                      <Ionicons name={(subject.icon as any) || 'book'} size={24} color={COLORS.white} />
-                    </View>
-                    <View style={styles.subjectCardContent}>
-                      <Text style={styles.subjectCardTitle} numberOfLines={1}>{subject.name}</Text>
-                      {gradeName ? <Text style={styles.subjectCardSubtitle}>{gradeName}</Text> : null}
-                    </View>
-                    <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} style={{ marginLeft: SPACING.xs }} />
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          ) : (
-            <EmptyState 
-              icon="book-outline"
-              title="No subjects yet" 
-              description="Add your first course to build your study dashboard."
-              actionText="Add Course"
-              onAction={() => setSubjectModalVisible(true)}
-              style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
-            />
-          )}
+        {/* ─── Quick Access Grid ───────────────────────────────────── */}
+        <View style={styles.sectionPadded}>
+          <Text style={styles.sectionTitle}>Quick access</Text>
+          <View style={styles.quickAccessGrid}>
+            {quickAccessItems.map((item, i) => (
+              <TouchableOpacity
+                key={i}
+                style={[styles.quickAccessCard, item.disabled && styles.quickAccessDisabled]}
+                onPress={item.disabled ? undefined : item.onPress}
+                activeOpacity={item.disabled ? 1 : 0.7}
+              >
+                <View style={[styles.quickAccessIcon, { backgroundColor: item.color + '18' }]}>
+                  <Ionicons name={item.icon as any} size={22} color={item.disabled ? COLORS.textMuted : item.color} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.quickAccessTitle, item.disabled && { color: COLORS.textMuted }]}>
+                    {item.title}
+                  </Text>
+                  <Text style={styles.quickAccessSub}>{item.subtitle}</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
 
-        <View style={styles.section}>
-          <SectionHeader title="Recommended for You" subtitle="Personalized study actions based on your progress" />
-          {recommendations.length > 0 ? (
-            recommendations.map((rec, i) => (
-              <RecommendationCard 
-                key={i} 
-                recommendation={rec} 
-                onPress={() => {
-                  if (rec.type === 'topic_quiz' || rec.type === 'continue') {
-                    if (rec.topicId) router.push(`/topic/${rec.topicId}`);
-                    else router.push({ pathname: '/quiz/[topic]', params: { topic: rec.topicName || 'Unknown', gradeLevel: rec.gradeLevel || user?.grade_level || 'NSSCO' } });
-                  } else if (rec.type === 'review_topic') {
-                    if (rec.topicId) router.push(`/topic/${rec.topicId}`);
-                    else router.push('/quizzes');
-                  } else if (rec.type === 'past_paper') {
-                    router.push('/papers');
-                  } else if (rec.type === 'flashcards') {
-                    router.push('/flashcards');
-                  }
-                }}
+        {/* ─── Today's Goal ────────────────────────────────────────── */}
+        <View style={styles.sectionPadded}>
+          <Text style={styles.sectionTitle}>Today's goal</Text>
+          <View style={styles.goalCard}>
+            <View style={styles.goalRow}>
+              <Text style={styles.goalValue}>
+                {subjectStats.length > 0
+                  ? `${Math.round(subjectStats.reduce((a, s) => a + s.averageMastery, 0) / subjectStats.length)}%`
+                  : '0%'}
+              </Text>
+              <Text style={styles.goalLabel}>overall mastery</Text>
+            </View>
+            <View style={styles.goalBarBg}>
+              <View
+                style={[
+                  styles.goalBarFill,
+                  {
+                    width: `${subjectStats.length > 0 ? Math.round(subjectStats.reduce((a, s) => a + s.averageMastery, 0) / subjectStats.length) : 0}%`,
+                  },
+                ]}
               />
-            ))
-          ) : (
-             <EmptyState 
-              icon="analytics-outline"
-              title="No recommendations yet" 
-              description="Complete quizzes to get personalized recommendations."
-              style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
-            />
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <SectionHeader title="Your Progress" actionText="View All" onAction={() => router.push('/analytics')} />
-          {subjectStats.length > 0 ? (
-            <View style={styles.progressCard}>
-               {subjectStats.slice(0, 3).map((stat, i) => (
-                 <View key={stat.subject} style={[styles.progressItem, i !== Math.min(2, subjectStats.length - 1) && styles.progressItemBorder]}>
-                    <View style={styles.progressHeader}>
-                      <Text style={styles.progressSubject}>{stat.subject}</Text>
-                      <Text style={[styles.progressPercentage, { color: getProgressColor(stat.averageMastery) }]}>{stat.averageMastery}%</Text>
-                    </View>
-                    <ProgressBar progress={stat.averageMastery / 100} color={getProgressColor(stat.averageMastery)} />
-                 </View>
-               ))}
             </View>
-          ) : (
-            <EmptyState 
-              title="Track your mastery" 
-              description="Subject progress will appear here once you take quizzes."
-              style={{ backgroundColor: COLORS.white, borderRadius: RADIUS.lg, ...SHADOWS.sm }}
-            />
-          )}
-        </View>
-
-        <View style={styles.section}>
-          <SectionHeader title="Quick Study Tools" />
-          <View style={styles.toolsGrid}>
-             <ToolCard icon="document-text" title="Papers" color={COLORS.green} onPress={() => router.push('/papers')} />
-             <ToolCard icon="help-circle" title="Quizzes" color={COLORS.accent} onPress={() => router.push('/quizzes')} />
-             <ToolCard icon="albums" title="Flashcards" color={COLORS.primary} onPress={() => router.push('/flashcards')} />
-             <ToolCard 
-               icon="chatbubbles" 
-               title="NamTutor" 
-               color={FEATURES.ENABLE_NAMTUTOR ? COLORS.gold : COLORS.textMuted} 
-               onPress={() => { if (FEATURES.ENABLE_NAMTUTOR) router.push('/tutor'); }} 
-               badge={FEATURES.ENABLE_NAMTUTOR ? "NEW" : "Coming Soon"} 
-             />
-             <ToolCard icon="bookmark" title="Saved" color={COLORS.red} onPress={() => router.push('/bookmarks')} />
-             <ToolCard icon="stats-chart" title="Progress" color={COLORS.primaryDark} onPress={() => router.push('/analytics')} />
           </View>
         </View>
-        
-        <View style={{ height: 40 }} />
+
+        {/* ─── Recommendations ─────────────────────────────────────── */}
+        {topRec && (
+          <View style={styles.sectionPadded}>
+            <Text style={styles.sectionTitle}>Because you're learning...</Text>
+            <TouchableOpacity
+              style={styles.recCard}
+              activeOpacity={0.7}
+              onPress={() => {
+                if (topRec.type === 'topic_quiz' || topRec.type === 'continue') {
+                  if (topRec.topicId) router.push(`/topic/${topRec.topicId}`);
+                  else router.push({ pathname: '/quiz/[topic]', params: { topic: topRec.topicName || 'Unknown', gradeLevel: topRec.gradeLevel || user?.grade_level || 'NSSCO' } });
+                } else if (topRec.type === 'review_topic') {
+                  if (topRec.topicId) router.push(`/topic/${topRec.topicId}`);
+                  else router.push('/quizzes');
+                } else if (topRec.type === 'past_paper') {
+                  router.push('/papers');
+                } else if (topRec.type === 'flashcards') {
+                  router.push('/flashcards');
+                }
+              }}
+            >
+              <Text style={styles.recText}>{topRec.reason || `Practice your weakest topics`}</Text>
+              <Ionicons name="chevron-forward" size={18} color={COLORS.textMuted} />
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* ─── Exam Countdown ──────────────────────────────────────── */}
+        <View style={styles.sectionPadded}>
+          <View style={styles.examCard}>
+            <View style={styles.examLeft}>
+              <Ionicons name="calendar-outline" size={20} color={COLORS.primary} />
+              <View style={{ marginLeft: SPACING.sm }}>
+                <Text style={styles.examLabel}>Exams in</Text>
+                <Text style={styles.examDays}>{daysToExam} days</Text>
+              </View>
+            </View>
+            <TouchableOpacity onPress={() => router.push('/school' as any)}>
+              <Text style={styles.examLink}>View timetable</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </ScrollView>
     );
   };
 
+  // ═══════════════════════════════════════════════════════════════════
+  // UNAUTHENTICATED RENDER (preserved from original)
+  // ═══════════════════════════════════════════════════════════════════
   const renderUnauthenticated = () => (
     <ScrollView showsVerticalScrollIndicator={false}>
-      {/* Existing Marketing Hero (Polished) */}
+      {/* Hero */}
       <View style={styles.hero}>
-        <View style={styles.heroOverlay}>
+        <View style={[styles.heroOverlay, { paddingTop: Math.max(insets.top, 16) + 16 }]}>
           <View style={styles.topBar}>
             <View style={styles.logoRow}>
               <View style={styles.logoIcon}>
@@ -367,30 +444,7 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={styles.widgetContainer}>
-        <View style={styles.widgetCard}>
-          <View style={styles.widgetItem}>
-            <View style={[styles.widgetIconBg, { backgroundColor: COLORS.gold + '20' }]}>
-              <Ionicons name="flame" size={24} color={COLORS.gold} />
-            </View>
-            <View>
-              <Text style={styles.widgetValue}>0 Days</Text>
-              <Text style={styles.widgetLabel}>Study Streak</Text>
-            </View>
-          </View>
-          <View style={styles.widgetDivider} />
-          <View style={styles.widgetItem}>
-            <View style={[styles.widgetIconBg, { backgroundColor: COLORS.primary + '20' }]}>
-              <Ionicons name="calendar" size={24} color={COLORS.primary} />
-            </View>
-            <View>
-              <Text style={styles.widgetValue}>{daysToExam} Days</Text>
-              <Text style={styles.widgetLabel}>Until Exams</Text>
-            </View>
-          </View>
-        </View>
-      </View>
-
+      {/* Stats */}
       <View style={styles.statsContainer}>
         <View style={styles.statsRow}>
           {[
@@ -410,8 +464,9 @@ export default function HomeScreen() {
         </View>
       </View>
 
-      <View style={styles.section}>
-        <SectionHeader title="Everything You Need" subtitle="All the tools to prepare for your exams" />
+      {/* Features */}
+      <View style={styles.sectionPadded}>
+        <Text style={styles.sectionTitle}>Everything You Need</Text>
         {[
           { icon: 'albums', title: 'Revision Flashcards', desc: 'Active recall study cards tailored to your selected subjects.', color: COLORS.primary, bg: COLORS.primaryLight + '30', action: () => router.push('/flashcards') },
           { icon: 'document-text', title: 'Free Past Papers', desc: 'Access all NSSCO & NSSCAS past exam papers from 2019-2024 completely free.', color: COLORS.green, bg: COLORS.greenLight, action: () => router.push('/papers') },
@@ -443,6 +498,7 @@ export default function HomeScreen() {
         ))}
       </View>
 
+      {/* CTA */}
       <View style={styles.ctaSection}>
         <View style={styles.ctaIcon}>
           <Ionicons name="rocket" size={32} color={COLORS.white} />
@@ -461,76 +517,248 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       {user ? renderAuthenticated() : renderUnauthenticated()}
-        <SubjectSelectionModal 
-          visible={subjectModalVisible}
-          onClose={() => setSubjectModalVisible(false)}
-          onEnrollSuccess={() => {
-            setSubjectModalVisible(false);
-            fetchAuthenticatedData();
-          }}
-        />
-        
-        <AuthModal 
-          visible={authVisible} 
-          onClose={() => setAuthVisible(false)} 
-        />
+      <SubjectSelectionModal 
+        visible={subjectModalVisible}
+        onClose={() => setSubjectModalVisible(false)}
+        onEnrollSuccess={() => {
+          setSubjectModalVisible(false);
+          fetchAuthenticatedData();
+        }}
+      />
+      <AuthModal 
+        visible={authVisible} 
+        onClose={() => setAuthVisible(false)} 
+      />
     </View>
   );
 }
 
-const ToolCard = ({ icon, title, color, onPress, badge }: any) => (
-  <TouchableOpacity style={styles.toolCard} onPress={onPress} activeOpacity={0.7}>
-    <View style={[styles.toolIcon, { backgroundColor: color + '15' }]}>
-      <Ionicons name={icon} size={24} color={color} />
-      {badge && (
-         <View style={styles.toolBadge}>
-           <Text style={styles.toolBadgeText}>{badge}</Text>
-         </View>
-      )}
-    </View>
-    <Text style={styles.toolText}>{title}</Text>
-  </TouchableOpacity>
-);
-
+// ═══════════════════════════════════════════════════════════════════════
+// STYLES
+// ═══════════════════════════════════════════════════════════════════════
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  headerAvatar: { width: 36, height: 36, borderRadius: 18, borderWidth: 2, borderColor: COLORS.white },
-  section: { paddingHorizontal: SPACING.xl, marginBottom: SPACING.xxxl },
-  
-  // Auth Widgets
-  authWidgetContainer: { paddingHorizontal: SPACING.xl, marginTop: -SPACING.md, marginBottom: SPACING.xxl, zIndex: 10 },
-  authWidgetCard: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.md, alignItems: 'center' },
-  authWidgetItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
-  authWidgetIconBg: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  authWidgetValue: { ...FONTS.h3, color: COLORS.textPrimary },
-  authWidgetLabel: { ...FONTS.small, color: COLORS.textMuted },
-  authWidgetDivider: { width: 1, height: 40, backgroundColor: COLORS.borderLight },
-  
-  // Recommendations
-  recommendedCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.md, padding: SPACING.md, marginBottom: SPACING.sm, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
-  recommendedIcon: { width: 40, height: 40, borderRadius: RADIUS.sm, backgroundColor: COLORS.accentLight + '30', alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
-  recommendedTitle: { ...FONTS.bodyBold, color: COLORS.textPrimary, marginBottom: 2 },
-  recommendedSub: { ...FONTS.small, color: COLORS.textMuted },
-  
-  // Progress
-  progressCard: { backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.lg, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
-  progressItem: { paddingVertical: SPACING.md },
-  progressItemBorder: { borderBottomWidth: 1, borderBottomColor: COLORS.borderLight },
-  progressHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xs },
-  progressSubject: { ...FONTS.bodyBold, color: COLORS.textPrimary },
-  progressPercentage: { ...FONTS.bodyBold },
-  
-  // Tools Grid
-  toolsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: SPACING.md, justifyContent: 'space-between' },
-  toolCard: { width: '31%', backgroundColor: COLORS.white, borderRadius: RADIUS.md, paddingVertical: SPACING.lg, paddingHorizontal: SPACING.sm, alignItems: 'center', ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
-  toolIcon: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.sm },
-  toolText: { ...FONTS.caption, color: COLORS.textPrimary, textAlign: 'center' },
-  toolBadge: { position: 'absolute', top: -4, right: -4, backgroundColor: COLORS.red, paddingHorizontal: 4, paddingVertical: 2, borderRadius: 4 },
-  toolBadgeText: { fontSize: 8, fontWeight: '800', color: COLORS.white },
-  
-  // Unauth Hero
+
+  // ─── Authenticated Header ──────────────────────────────────────────
+  header: {
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.lg,
+    backgroundColor: COLORS.background,
+  },
+  greetingRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
+    marginBottom: 4,
+  },
+  greeting: {
+    fontSize: 26,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    letterSpacing: -0.5,
+  },
+  streakPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: RADIUS.full,
+  },
+  streakText: {
+    ...FONTS.small,
+    color: '#92400E',
+    fontWeight: '600',
+  },
+  gradeContext: {
+    ...FONTS.body,
+    color: COLORS.textMuted,
+  },
+
+  // ─── Section Padding ──────────────────────────────────────────────
+  sectionPadded: {
+    paddingHorizontal: SPACING.xl,
+    marginBottom: SPACING.xxl,
+  },
+  sectionTitle: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
+  },
+
+  // ─── Continue Learning ────────────────────────────────────────────
+  continueLearningCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  continueLearningLabel: {
+    ...FONTS.small,
+    color: COLORS.primary,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: SPACING.xs,
+  },
+  continueLearningTitle: {
+    ...FONTS.h2,
+    color: COLORS.textPrimary,
+    marginBottom: 4,
+  },
+  continueLearningSubtitle: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    marginBottom: SPACING.md,
+  },
+  continueLearningProgress: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
+  },
+  continueLearningBarBg: {
+    flex: 1,
+    height: 6,
+    backgroundColor: COLORS.borderLight,
+    borderRadius: 3,
+  },
+  continueLearningBarFill: {
+    height: '100%',
+    backgroundColor: COLORS.primary,
+    borderRadius: 3,
+  },
+  continueLearningPercent: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    fontWeight: '600',
+  },
+
+  // ─── Quick Access Grid ────────────────────────────────────────────
+  quickAccessGrid: {
+    width: '100%',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: SPACING.sm,
+  },
+  quickAccessCard: {
+    width: '48.5%',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    gap: SPACING.sm,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  quickAccessDisabled: {
+    opacity: 0.5,
+  },
+  quickAccessIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  quickAccessTitle: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+    fontSize: 13,
+  },
+  quickAccessSub: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    fontSize: 11,
+  },
+
+  // ─── Today's Goal ─────────────────────────────────────────────────
+  goalCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.lg,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  goalRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: SPACING.sm,
+    marginBottom: SPACING.sm,
+  },
+  goalValue: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+  },
+  goalLabel: {
+    ...FONTS.body,
+    color: COLORS.textMuted,
+  },
+  goalBarBg: {
+    height: 8,
+    backgroundColor: COLORS.borderLight,
+    borderRadius: 4,
+  },
+  goalBarFill: {
+    height: '100%',
+    backgroundColor: '#10B981',
+    borderRadius: 4,
+  },
+
+  // ─── Recommendation Card ──────────────────────────────────────────
+  recCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    padding: SPACING.lg,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  recText: {
+    ...FONTS.body,
+    color: COLORS.textSecondary,
+    flex: 1,
+  },
+
+  // ─── Exam Countdown ───────────────────────────────────────────────
+  examCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: COLORS.primary + '08',
+    borderRadius: RADIUS.md,
+    padding: SPACING.lg,
+    borderWidth: 1,
+    borderColor: COLORS.primary + '20',
+  },
+  examLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  examLabel: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+  },
+  examDays: {
+    ...FONTS.bodyBold,
+    color: COLORS.primary,
+  },
+  examLink: {
+    ...FONTS.bodyBold,
+    color: COLORS.primary,
+    fontSize: 13,
+  },
+
+  // ─── Unauth Hero ──────────────────────────────────────────────────
   hero: { backgroundColor: COLORS.primary, minHeight: 420 },
-  heroOverlay: { flex: 1, backgroundColor: 'rgba(88, 28, 135, 0.85)', paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl },
+  heroOverlay: { flex: 1, backgroundColor: 'rgba(88, 28, 135, 0.85)', paddingHorizontal: SPACING.xl, paddingBottom: SPACING.xxxl },
   topBar: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: SPACING.xxxl },
   logoRow: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm },
   logoIcon: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center' },
@@ -547,25 +775,16 @@ const styles = StyleSheet.create({
   primaryBtnText: { ...FONTS.bodyBold, color: COLORS.primary },
   secondaryBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: SPACING.xl, paddingVertical: 14, borderRadius: RADIUS.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.3)' },
   secondaryBtnText: { ...FONTS.bodyBold, color: COLORS.white },
-  
-  // Unauth Widget
-  widgetContainer: { paddingHorizontal: SPACING.xl, marginTop: -SPACING.xl, marginBottom: SPACING.lg, zIndex: 10 },
-  widgetCard: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.md, ...SHADOWS.md, alignItems: 'center' },
-  widgetItem: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: SPACING.sm },
-  widgetIconBg: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center' },
-  widgetValue: { ...FONTS.h3, color: COLORS.textPrimary },
-  widgetLabel: { ...FONTS.small, color: COLORS.textMuted },
-  widgetDivider: { width: 1, height: 40, backgroundColor: COLORS.borderLight },
-  
-  // Unauth Stats
+
+  // ─── Unauth Stats ─────────────────────────────────────────────────
   statsContainer: { marginTop: -20, paddingHorizontal: SPACING.lg, marginBottom: SPACING.xl },
   statsRow: { flexDirection: 'row', backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.lg, ...SHADOWS.lg },
   statItem: { flex: 1, alignItems: 'center' },
   statIcon: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.xs },
   statValue: { ...FONTS.h3, color: COLORS.textPrimary },
   statLabel: { ...FONTS.small, color: COLORS.textMuted },
-  
-  // Unauth Features
+
+  // ─── Unauth Features ──────────────────────────────────────────────
   featureCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.white, borderRadius: RADIUS.lg, padding: SPACING.lg, marginBottom: SPACING.md, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
   featureIcon: { width: 48, height: 48, borderRadius: RADIUS.md, alignItems: 'center', justifyContent: 'center', marginRight: SPACING.md },
   featureContent: { flex: 1, marginRight: SPACING.sm },
@@ -574,37 +793,12 @@ const styles = StyleSheet.create({
   featureDesc: { ...FONTS.small, color: COLORS.textSecondary, lineHeight: 16 },
   newBadge: { backgroundColor: COLORS.red, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 },
   newBadgeText: { fontSize: 9, fontWeight: '800', color: COLORS.white },
-  
-  // Unauth CTA
+
+  // ─── Unauth CTA ───────────────────────────────────────────────────
   ctaSection: { marginHorizontal: SPACING.xl, backgroundColor: COLORS.primary, borderRadius: RADIUS.xl, padding: SPACING.xxl, alignItems: 'center', marginBottom: SPACING.xxxl, ...SHADOWS.xl },
   ctaIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: SPACING.lg },
   ctaTitle: { ...FONTS.h2, color: COLORS.white, textAlign: 'center', marginBottom: SPACING.sm },
   ctaSubtitle: { ...FONTS.body, color: 'rgba(255,255,255,0.8)', textAlign: 'center', lineHeight: 22, marginBottom: SPACING.xl },
   ctaBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.sm, backgroundColor: COLORS.white, paddingHorizontal: SPACING.xxl, paddingVertical: 14, borderRadius: RADIUS.md },
   ctaBtnText: { ...FONTS.bodyBold, color: COLORS.primary },
-  subjectCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: COLORS.white,
-    padding: SPACING.sm,
-    borderRadius: RADIUS.md,
-    minWidth: 160,
-    ...SHADOWS.sm,
-  },
-  subjectIconBg: {
-    width: 40,
-    height: 40,
-    borderRadius: RADIUS.sm,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: SPACING.sm,
-  },
-  subjectCardContent: {
-    flex: 1,
-  },
-  subjectCardTitle: { ...FONTS.h3, color: COLORS.textPrimary },
-  subjectCardSubtitle: {
-    ...FONTS.small,
-    color: COLORS.textMuted,
-  },
 });

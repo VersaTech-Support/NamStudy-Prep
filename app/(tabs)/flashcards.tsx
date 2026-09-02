@@ -13,6 +13,7 @@ import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { useLocalSearchParams } from 'expo-router';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import AuthModal from '@/components/AuthModal';
 
 interface Flashcard {
@@ -51,9 +52,21 @@ export default function FlashcardsScreen() {
       let query = supabase.from('flashcards').select('*');
       
       const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+      let userSubjects: string[] = [];
       
-      if (!userIsAdmin && user?.subjects && user.subjects.length > 0) {
-        query = query.in('subject', user.subjects);
+      if (!userIsAdmin && user) {
+        const { data: ssData } = await supabase
+          .from('student_subjects')
+          .select('curriculum_subjects(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        if (ssData) {
+          userSubjects = ssData.map((s: any) => s.curriculum_subjects?.name).filter(Boolean);
+        }
+      }
+      
+      if (!userIsAdmin && userSubjects.length > 0) {
+        query = query.in('subject', userSubjects);
       }
       
       if (!userIsAdmin && user?.grade_level) {
@@ -137,9 +150,7 @@ export default function FlashcardsScreen() {
   if (!user) {
     return (
       <View style={styles.container}>
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Flashcards</Text>
-        </View>
+        <ScreenHeader title="Flashcards" subtitle="Active recall and revision notes" />
         <View style={styles.centerContent}>
           <Ionicons name="albums-outline" size={64} color={COLORS.textMuted} />
           <Text style={styles.emptyTitle}>Sign In to Study</Text>
@@ -155,14 +166,10 @@ export default function FlashcardsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerContent}>
-          <Text style={styles.headerTitle}>Flashcards</Text>
-          <Text style={styles.headerSubtitle}>
-            Active recall and revision notes
-          </Text>
-        </View>
-      </View>
+      <ScreenHeader 
+        title="Flashcards" 
+        subtitle="Active recall and revision notes" 
+      />
 
       {loading ? (
         <View style={styles.centerContent}>
@@ -237,10 +244,6 @@ export default function FlashcardsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
-  headerContent: {},
-  headerTitle: { ...FONTS.h1, color: COLORS.white, marginBottom: 2 },
-  headerSubtitle: { ...FONTS.caption, color: 'rgba(255,255,255,0.7)' },
   centerContent: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: SPACING.xxxl },
   emptyTitle: { ...FONTS.h3, color: COLORS.textPrimary, marginTop: SPACING.md },
   emptyText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.xs, marginBottom: SPACING.xl, textAlign: 'center' },
@@ -285,7 +288,7 @@ const styles = StyleSheet.create({
   
   navigationRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: SPACING.xl, marginBottom: SPACING.lg },
   navBtn: { flexDirection: 'row', alignItems: 'center', gap: SPACING.xs, paddingVertical: SPACING.sm, paddingHorizontal: SPACING.md, backgroundColor: COLORS.white, borderRadius: RADIUS.md, ...SHADOWS.sm, borderWidth: 1, borderColor: COLORS.borderLight },
-  navBtnDisabled: { backgroundColor: COLORS.background, shadowOpacity: 0, borderColor: 'transparent' },
+  navBtnDisabled: { backgroundColor: COLORS.background, boxShadow: 'none', borderColor: 'transparent' },
   navBtnText: { ...FONTS.bodyBold, color: COLORS.primary },
   navBtnTextDisabled: { color: COLORS.textMuted },
 });

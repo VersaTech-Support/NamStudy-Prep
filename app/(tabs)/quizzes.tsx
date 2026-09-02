@@ -14,6 +14,7 @@ import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { getCacheData, setCacheData } from '@/lib/cache';
+import ScreenHeader from '@/components/ui/ScreenHeader';
 import TopicCard from '@/components/TopicCard';
 import UpgradeModal from '@/components/UpgradeModal';
 import AuthModal from '@/components/AuthModal';
@@ -36,6 +37,7 @@ export default function QuizzesScreen() {
   const [authVisible, setAuthVisible] = useState(false);
   const [freeAttempts, setFreeAttempts] = useState<Record<string, number>>({});
   const [isOfflineError, setIsOfflineError] = useState(false);
+  const [enrolledSubjects, setEnrolledSubjects] = useState<string[]>([]);
 
   useEffect(() => {
     fetchTopics();
@@ -56,9 +58,22 @@ export default function QuizzesScreen() {
         .select('topic_name, grade_level, subject');
 
       const userIsAdmin = user?.role === 'admin' || (user as any)?.is_admin === true;
+      let userSubjects: string[] = [];
 
-      if (user && !userIsAdmin && user.subjects && user.subjects.length > 0) {
-        query = query.in('subject', user.subjects);
+      if (user && !userIsAdmin) {
+        const { data: ssData } = await supabase
+          .from('student_subjects')
+          .select('curriculum_subjects(name)')
+          .eq('user_id', user.id)
+          .eq('is_active', true);
+        if (ssData) {
+          userSubjects = ssData.map((s: any) => s.curriculum_subjects?.name).filter(Boolean);
+          setEnrolledSubjects(userSubjects);
+        }
+      }
+
+      if (user && !userIsAdmin && userSubjects.length > 0) {
+        query = query.in('subject', userSubjects);
       }
 
       const { data, error } = await query;
@@ -100,8 +115,8 @@ export default function QuizzesScreen() {
     return true;
   });
 
-  const availableSubjects = user?.subjects && user.subjects.length > 0
-    ? user.subjects
+  const availableSubjects = enrolledSubjects.length > 0
+    ? enrolledSubjects
     : [...new Set(topics.map(t => t.subject))].filter(Boolean);
 
   const handleTopicPress = (topic: TopicSummary) => {
@@ -146,12 +161,10 @@ export default function QuizzesScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>Topic Quizzes</Text>
-        <Text style={styles.headerSubtitle}>
-          Test your knowledge across all topics
-        </Text>
-      </View>
+      <ScreenHeader 
+        title="Topic Quizzes" 
+        subtitle="Test your knowledge across all topics" 
+      />
 
       <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollView}>
         {availableSubjects.length > 1 && (
@@ -303,9 +316,6 @@ export default function QuizzesScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { backgroundColor: COLORS.primary, paddingTop: Platform.OS === 'ios' ? 56 : 40, paddingBottom: SPACING.xl, paddingHorizontal: SPACING.xl },
-  headerTitle: { ...FONTS.h1, color: COLORS.white, marginBottom: 2 },
-  headerSubtitle: { ...FONTS.caption, color: 'rgba(255,255,255,0.7)' },
   scrollView: { flex: 1 },
   filterSection: { paddingTop: SPACING.lg, paddingLeft: SPACING.xl },
   filterLabel: { ...FONTS.caption, color: COLORS.textSecondary, marginBottom: SPACING.sm },
@@ -327,7 +337,7 @@ const styles = StyleSheet.create({
   infoBannerBtnText: { ...FONTS.small, color: COLORS.white, fontWeight: '700' },
   vipBanner: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.goldLight, marginHorizontal: SPACING.xl, marginTop: SPACING.lg, padding: SPACING.md, borderRadius: RADIUS.md, gap: SPACING.sm, borderWidth: 1, borderColor: COLORS.gold + '30' },
   vipBannerText: { ...FONTS.caption, color: COLORS.goldDark, fontWeight: '700' },
-  topicsGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
+  topicsGrid: { width: '100%', flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', paddingHorizontal: SPACING.xl, paddingTop: SPACING.lg },
   loadingContainer: { alignItems: 'center', paddingVertical: 60 },
   loadingText: { ...FONTS.caption, color: COLORS.textMuted, marginTop: SPACING.md },
   emptyContainer: { alignItems: 'center', paddingVertical: 60 },

@@ -1,22 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
-import { COLORS, SPACING, FONTS, RADIUS } from '@/constants/theme';
+import { COLORS, SPACING, FONTS, RADIUS, SHADOWS } from '@/constants/theme';
 import { FEATURES } from '@/constants/features';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
-import ScreenHeader from '@/components/ui/ScreenHeader';
-import SectionHeader from '@/components/ui/SectionHeader';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoadingState from '@/components/ui/LoadingState';
 import EmptyState from '@/components/ui/EmptyState';
-import GradientCard from '@/components/ui/GradientCard';
 import ProgressBar from '@/components/ui/ProgressBar';
-import RecommendationCard from '@/components/ui/RecommendationCard';
 
 import { getUserMastery } from '@/lib/learning/mastery';
-import { getNextBestActions } from '@/lib/learning/recommendations';
-import { TopicMastery, StudyRecommendation } from '@/lib/learning/types';
+import { getTopicContentProgress } from '@/lib/learning/contentProgress';
+import { TopicMastery } from '@/lib/learning/types';
 
 interface Topic {
   id: string;
@@ -46,6 +43,8 @@ export default function TopicHubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const { user } = useUser();
+  const insets = useSafeAreaInsets();
+  
   const [loading, setLoading] = useState(true);
   const [topic, setTopic] = useState<Topic | null>(null);
   const [subject, setSubject] = useState<CurriculumSubject | null>(null);
@@ -55,7 +54,9 @@ export default function TopicHubScreen() {
   const [flashcardCount, setFlashcardCount] = useState(0);
   const [quizCount, setQuizCount] = useState(0);
   const [topicMastery, setTopicMastery] = useState<TopicMastery | null>(null);
-  const [recommendation, setRecommendation] = useState<StudyRecommendation | null>(null);
+  const [contentProgressPercent, setContentProgressPercent] = useState(0);
+
+  const [activeTab, setActiveTab] = useState<'notes' | 'quiz' | 'papers'>('notes');
 
   useEffect(() => {
     fetchTopicData();
@@ -64,7 +65,6 @@ export default function TopicHubScreen() {
   const fetchTopicData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch Topic
       const { data: tData, error: tErr } = await supabase
         .from('topics')
         .select('*')
@@ -73,8 +73,6 @@ export default function TopicHubScreen() {
       
       if (tData) {
         setTopic(tData);
-        
-        // 2. Fetch Curriculum Subject
         const { data: sData } = await supabase
           .from('curriculum_subjects')
           .select('*')
@@ -83,8 +81,6 @@ export default function TopicHubScreen() {
           
         if (sData) {
           setSubject(sData);
-          
-          // 3. Fetch Grade
           const { data: gData } = await supabase
             .from('grades')
             .select('*')
@@ -93,8 +89,6 @@ export default function TopicHubScreen() {
             
           if (gData) {
             setGrade(gData);
-            
-            // 4. Fetch Curriculum
             const { data: cData } = await supabase
               .from('curricula')
               .select('*')
@@ -105,39 +99,20 @@ export default function TopicHubScreen() {
         }
       }
 
-      // 5. Fetch Counts
-      const { count: fCount } = await supabase
-        .from('flashcards')
-        .select('*', { count: 'exact', head: true })
-        .eq('topic_id', id);
+      const { count: fCount } = await supabase.from('flashcards').select('*', { count: 'exact', head: true }).eq('topic_id', id);
       setFlashcardCount(fCount || 0);
 
-      const { count: qCount } = await supabase
-        .from('quizzes')
-        .select('*', { count: 'exact', head: true })
-        .eq('topic_id', id);
+      const { count: qCount } = await supabase.from('quizzes').select('*', { count: 'exact', head: true }).eq('topic_id', id);
       setQuizCount(qCount || 0);
 
-      // 6. Calculate Mastery using central intelligence service
       if (tData && user) {
+        const cp = await getTopicContentProgress(user.id, id);
+        setContentProgressPercent(cp.progressPercent);
+
         const masteryData = await getUserMastery(user.id);
         const thisTopicMastery = masteryData.topicMastery.find(t => t.topic_id === id);
         if (thisTopicMastery) {
           setTopicMastery(thisTopicMastery);
-        }
-
-        // Calculate next best action specifically contexted for this topic (if any)
-        // We can use the global engine, and if the primary recommendation isn't this topic, we could force it, 
-        // but for now we just get the top recommendation. If it's a weak topic, it'll naturally bubble up.
-        const nextActions = getNextBestActions({
-          topicMastery: thisTopicMastery ? [thisTopicMastery] : [], 
-          subjectMastery: masteryData.subjectMastery,
-          userSubjects: user.subjects || ['Mathematics'],
-          isPro: true, // simplified for context
-        });
-
-        if (nextActions.length > 0) {
-          setRecommendation(nextActions[0]);
         }
       }
 
@@ -148,18 +123,14 @@ export default function TopicHubScreen() {
     }
   };
 
-  if (loading) {
-    return <LoadingState text="Loading Topic Hub..." />;
-  }
-
+  if (loading) return <LoadingState text="Loading Topic..." />;
   if (!topic || !subject) {
     return (
       <View style={{ flex: 1, backgroundColor: COLORS.background }}>
-        <ScreenHeader title="Topic Not Found" showBack />
         <EmptyState 
           icon="document-text-outline"
           title="Topic Unavailable"
-          description="We couldn't find the requested topic. It may have been moved or deleted."
+          description="We couldn't find the requested topic."
           actionText="Go Back"
           onAction={() => router.back()}
         />
@@ -169,161 +140,178 @@ export default function TopicHubScreen() {
 
   return (
     <View style={styles.container}>
-      <ScreenHeader 
-        title={topic.name} 
-        subtitle={`${curriculum?.name || ''} • ${grade?.name || ''} • ${subject.name}`}
-        showBack 
-      />
-      <ScrollView contentContainerStyle={styles.content}>
+      {/* ─── Header ─────────────────────────────────────────────── */}
+      <View style={[styles.header, { paddingTop: Math.max(insets.top, 16) + 8 }]}>
+        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+          <Text style={styles.backText}>{subject.name}</Text>
+        </TouchableOpacity>
         
-        {/* Overview & Mastery */}
-        <View style={styles.masteryContainer}>
-          <Text style={styles.sectionTitle}>Your Progress</Text>
-          {topicMastery !== null ? (
-          <View>
-            <ProgressBar 
-              progress={topicMastery.masteryScore / 100} 
-              height={12} 
-              color={topicMastery.masteryScore >= 70 ? COLORS.green : topicMastery.masteryScore >= 50 ? COLORS.gold : COLORS.red} 
-            />
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 8 }}>
-              <Text style={{ ...FONTS.small, color: COLORS.textSecondary }}>
-                {topicMastery.masteryScore}% Mastered
-              </Text>
-              <Text style={{ ...FONTS.small, color: COLORS.textMuted }}>
-                {topicMastery.attempts} attempt{topicMastery.attempts !== 1 ? 's' : ''} 
-                {topicMastery.trend !== 'INSUFFICIENT_DATA' && ` • ${topicMastery.trend.toLowerCase()}`}
-              </Text>
-            </View>
-            {topicMastery.isLowConfidence && (
-              <Text style={{ ...FONTS.caption, color: COLORS.textMuted, marginTop: 4 }}>
-                Limited practice data available.
-              </Text>
-            )}
-          </View>
-          ) : (
-            <Text style={styles.noMasteryText}>
-              Practice this topic to build your mastery score.
-            </Text>
-          )}
+        <Text style={styles.topicTitle}>{topic.name}</Text>
+        <Text style={styles.topicSubtitle}>
+          {curriculum?.name} • {grade?.name}
+        </Text>
+
+        {/* ─── Segmented Control ────────────────────────────────── */}
+        <View style={styles.segmentedControl}>
+          <TouchableOpacity 
+            style={[styles.segment, activeTab === 'notes' && styles.segmentActive]}
+            onPress={() => setActiveTab('notes')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'notes' && styles.segmentTextActive]}>Notes</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.segment, activeTab === 'quiz' && styles.segmentActive]}
+            onPress={() => setActiveTab('quiz')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'quiz' && styles.segmentTextActive]}>Quiz</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.segment, activeTab === 'papers' && styles.segmentActive]}
+            onPress={() => setActiveTab('papers')}
+          >
+            <Text style={[styles.segmentText, activeTab === 'papers' && styles.segmentTextActive]}>Papers</Text>
+          </TouchableOpacity>
         </View>
+      </View>
 
-        {topic.description ? (
-          <Text style={styles.description}>{topic.description}</Text>
-        ) : null}
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        
+        {activeTab === 'notes' && (
+          <View>
+            <Text style={styles.sectionTitle}>Start studying</Text>
+            
+            {/* Core Concept / Continue Notes */}
+            <View style={styles.coreCard}>
+              <View style={styles.coreHeader}>
+                <Ionicons name="book" size={24} color={COLORS.primary} />
+                <View style={{ flex: 1, marginLeft: SPACING.md }}>
+                  <Text style={styles.coreTitle}>Core Concept</Text>
+                  <Text style={styles.coreDesc} numberOfLines={2}>
+                    {topic.description || 'Dive into the fundamental principles and theories for this topic.'}
+                  </Text>
+                </View>
+              </View>
+              
+              <View style={styles.progressRow}>
+                <View style={{ flex: 1 }}>
+                  <ProgressBar progress={contentProgressPercent / 100} color={COLORS.primary} />
+                  <Text style={styles.progressText}>{contentProgressPercent}% read</Text>
+                </View>
+                <TouchableOpacity 
+                  style={styles.continueBtn}
+                  onPress={() => router.push(`/topic/${topic.id}/notes` as any)}
+                >
+                  <Text style={styles.continueBtnText}>
+                    {contentProgressPercent === 0 ? 'Start notes' : 'Continue notes'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
 
-        {/* Recommended Next Action */}
-        {recommendation && (
-          <View style={{ marginBottom: SPACING.lg }}>
-            <SectionHeader title="Recommended Next" />
-            <RecommendationCard 
-              recommendation={recommendation}
-              onPress={() => {
-                if (recommendation.type === 'topic_quiz' || recommendation.type === 'continue') {
-                  router.push(`/quiz/${encodeURIComponent(topic.name)}?topic_id=${topic.id}&subject=${encodeURIComponent(subject.name)}`);
-                } else if (recommendation.type === 'flashcards') {
-                  router.push(`/flashcards?topic_id=${topic.id}&topic_name=${encodeURIComponent(topic.name)}`);
-                } else if (recommendation.type === 'past_paper') {
-                  router.push(`/papers?subject=${encodeURIComponent(subject.name)}`);
-                } else if (recommendation.type === 'review_topic') {
-                  // Already here
-                }
-              }}
-            />
+            <Text style={styles.sectionTitle}>Related practice</Text>
+            
+            {/* Flashcards */}
+            <TouchableOpacity 
+              style={styles.practiceCard}
+              onPress={() => router.push(`/flashcards?topic_id=${topic.id}&topic_name=${encodeURIComponent(topic.name)}` as any)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.practiceIcon, { backgroundColor: '#F59E0B15' }]}>
+                <Ionicons name="albums-outline" size={24} color="#F59E0B" />
+              </View>
+              <View style={{ flex: 1, marginLeft: SPACING.md }}>
+                <Text style={styles.practiceTitle}>Flashcards</Text>
+                <Text style={styles.practiceSub}>{flashcardCount} cards</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            </TouchableOpacity>
+
+            {/* Quick Quiz */}
+            <TouchableOpacity 
+              style={styles.practiceCard}
+              onPress={() => router.push(`/quiz/${encodeURIComponent(topic.name)}?topic_id=${topic.id}&subject=${encodeURIComponent(subject.name)}` as any)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.practiceIcon, { backgroundColor: '#10B98115' }]}>
+                <Ionicons name="help-circle-outline" size={24} color="#10B981" />
+              </View>
+              <View style={{ flex: 1, marginLeft: SPACING.md }}>
+                <Text style={styles.practiceTitle}>Quick Quiz</Text>
+                <Text style={styles.practiceSub}>{quizCount} questions available</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+            </TouchableOpacity>
+            
+            {/* AI Tutor */}
+            {FEATURES.ENABLE_NAMTUTOR && (
+              <TouchableOpacity 
+                style={styles.practiceCard}
+                onPress={() => {
+                  router.push({
+                    pathname: '/tutor',
+                    params: {
+                      topicId: topic.id,
+                      topicName: topic.name,
+                      subject: subject.name,
+                    }
+                  });
+                }}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.practiceIcon, { backgroundColor: COLORS.primaryLight + '20' }]}>
+                  <Ionicons name="sparkles-outline" size={24} color={COLORS.primary} />
+                </View>
+                <View style={{ flex: 1, marginLeft: SPACING.md }}>
+                  <Text style={styles.practiceTitle}>Ask NamTutor</Text>
+                  <Text style={styles.practiceSub}>Get instant AI help with {topic.name}</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
-        {/* Study Actions */}
-        <SectionHeader title="Study Tools" />
-        <View style={styles.actionGrid}>
-          
-          <TouchableOpacity 
-            style={[styles.actionCard, { width: '100%', marginBottom: SPACING.md, flexDirection: 'row', alignItems: 'center' }]} 
-            onPress={() => router.push(`/topic/${topic.id}/notes`)}
-          >
-            <View style={[styles.iconBox, { backgroundColor: COLORS.primaryLight, marginRight: SPACING.md }]}>
-              <Ionicons name="document-text-outline" size={24} color={COLORS.primary} />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.actionTitle}>Revision Notes</Text>
-              <Text style={styles.actionSubtitle}>Read comprehensive study notes</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={COLORS.textMuted} />
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionCard} 
-            onPress={() => router.push(`/flashcards?topic_id=${topic.id}&topic_name=${encodeURIComponent(topic.name)}`)}
-          >
-            <View style={[styles.iconBox, { backgroundColor: COLORS.goldLight }]}>
-              <Ionicons name="albums-outline" size={24} color={COLORS.gold} />
-            </View>
-            <Text style={styles.actionTitle}>Flashcards</Text>
-            <Text style={styles.actionSubtitle}>{flashcardCount} cards</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity 
-            style={styles.actionCard} 
-            onPress={() => router.push(`/quiz/${encodeURIComponent(topic.name)}?topic_id=${topic.id}&subject=${encodeURIComponent(subject.name)}`)}
-          >
-            <View style={[styles.iconBox, { backgroundColor: COLORS.greenLight }]}>
-              <Ionicons name="help-circle-outline" size={24} color={COLORS.green} />
-            </View>
-            <Text style={styles.actionTitle}>Quiz</Text>
-            <Text style={styles.actionSubtitle}>{quizCount} questions</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* AI Tutor Entry */}
-        <SectionHeader title="Stuck?" />
-        <GradientCard
-          onPress={() => {
-            if (FEATURES.ENABLE_NAMTUTOR) {
-              router.push({
-                pathname: '/tutor',
-                params: {
-                  topicId: topic.id,
-                  topicName: topic.name,
-                  subject: subject.name,
-                  grade: grade?.name,
-                  curriculum: curriculum?.name
-                }
-              });
-            }
-          }}
-        >
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-                <Text style={{ ...FONTS.h3, color: COLORS.white }}>Ask NamTutor</Text>
-                {!FEATURES.ENABLE_NAMTUTOR && (
-                  <View style={{ backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                    <Text style={{ ...FONTS.caption, color: COLORS.white, fontWeight: '600' }}>Coming Soon</Text>
-                  </View>
-                )}
-              </View>
-              <Text style={{ ...FONTS.body, color: COLORS.white, opacity: 0.9 }}>
-                {FEATURES.ENABLE_NAMTUTOR ? `Get instant AI help with ${topic.name}` : 'AI tutoring is temporarily offline.'}
+        {activeTab === 'quiz' && (
+          <View>
+            <View style={styles.masteryCard}>
+              <Text style={styles.masteryLabel}>Quiz Mastery</Text>
+              <Text style={styles.masteryScore}>{topicMastery ? `${topicMastery.masteryScore}%` : '0%'}</Text>
+              <ProgressBar 
+                progress={topicMastery ? topicMastery.masteryScore / 100 : 0} 
+                color={topicMastery && topicMastery.masteryScore >= 50 ? COLORS.green : COLORS.gold} 
+              />
+              <Text style={styles.masterySub}>
+                {topicMastery 
+                  ? `Based on ${topicMastery.attempts} attempt${topicMastery.attempts !== 1 ? 's' : ''}` 
+                  : 'Take a quiz to build your mastery score'}
               </Text>
             </View>
-            <Ionicons name="sparkles" size={32} color={FEATURES.ENABLE_NAMTUTOR ? COLORS.white : 'rgba(255,255,255,0.5)'} />
-          </View>
-        </GradientCard>
 
-        <View style={{ marginTop: SPACING.xl }}>
-          <SectionHeader 
-            title="Past Papers" 
-            subtitle="Relevant to this subject"
-            actionText="View All"
-            onAction={() => router.push(`/papers?subject=${encodeURIComponent(subject.name)}`)}
-          />
-        </View>
-        <View style={styles.paperPlaceholder}>
-          <Ionicons name="document-text-outline" size={24} color={COLORS.textMuted} />
-          <Text style={styles.placeholderText}>
-            Papers for {subject.name} ({grade?.name}) are available in the Paper Library.
-          </Text>
-        </View>
+            <TouchableOpacity 
+              style={styles.primaryBtn}
+              onPress={() => router.push(`/quiz/${encodeURIComponent(topic.name)}?topic_id=${topic.id}&subject=${encodeURIComponent(subject.name)}` as any)}
+            >
+              <Text style={styles.primaryBtnText}>Start Quiz</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {activeTab === 'papers' && (
+          <View style={styles.placeholderCard}>
+            <Ionicons name="document-text-outline" size={48} color={COLORS.textMuted} />
+            <Text style={styles.placeholderTitle}>Past Papers</Text>
+            <Text style={styles.placeholderText}>
+              Find relevant exam papers for {subject.name} in the Paper Library.
+            </Text>
+            <TouchableOpacity 
+              style={[styles.primaryBtn, { marginTop: SPACING.lg, width: '100%' }]}
+              onPress={() => router.push(`/papers?subject=${encodeURIComponent(subject.name)}` as any)}
+            >
+              <Text style={styles.primaryBtnText}>Browse Papers</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
       </ScrollView>
     </View>
@@ -335,76 +323,209 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.background,
   },
-  content: {
-    padding: SPACING.lg,
-    paddingBottom: SPACING.xxl,
+  
+  // Header
+  header: {
+    backgroundColor: COLORS.white,
+    paddingHorizontal: SPACING.xl,
+    paddingBottom: SPACING.md,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.borderLight,
   },
-  masteryContainer: {
-    backgroundColor: COLORS.surface,
-    padding: SPACING.lg,
-    borderRadius: RADIUS.lg,
-    marginBottom: SPACING.lg,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-  },
-  sectionTitle: {
-    ...FONTS.h3,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.sm,
-  },
-  noMasteryText: {
-    ...FONTS.body,
-    color: COLORS.textMuted,
-  },
-  description: {
-    ...FONTS.body,
-    color: COLORS.textPrimary,
-    marginBottom: SPACING.xl,
-    lineHeight: 22,
-  },
-  actionGrid: {
+  backButton: {
     flexDirection: 'row',
-    gap: SPACING.md,
-    marginBottom: SPACING.xl,
-  },
-  actionCard: {
-    flex: 1,
-    backgroundColor: COLORS.surface,
-    padding: SPACING.md,
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
     alignItems: 'center',
+    marginBottom: SPACING.md,
   },
-  iconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: SPACING.sm,
+  backText: {
+    ...FONTS.bodyBold,
+    color: COLORS.primary,
+    marginLeft: 4,
   },
-  actionTitle: {
-    ...FONTS.h3,
-    fontSize: 16,
+  topicTitle: {
+    ...FONTS.h1,
     color: COLORS.textPrimary,
     marginBottom: 4,
   },
-  actionSubtitle: {
+  topicSubtitle: {
+    ...FONTS.body,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.lg,
+  },
+
+  // Segmented Control
+  segmentedControl: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.surfaceAlt,
+    borderRadius: RADIUS.md,
+    padding: 4,
+  },
+  segment: {
+    flex: 1,
+    paddingVertical: 8,
+    alignItems: 'center',
+    borderRadius: RADIUS.sm,
+  },
+  segmentActive: {
+    backgroundColor: COLORS.white,
+    ...SHADOWS.sm,
+  },
+  segmentText: {
     ...FONTS.small,
     color: COLORS.textMuted,
+    fontWeight: '600',
   },
-  paperPlaceholder: {
-    backgroundColor: COLORS.surfaceAlt,
+  segmentTextActive: {
+    color: COLORS.textPrimary,
+  },
+
+  content: {
+    padding: SPACING.xl,
+    paddingBottom: 100,
+  },
+
+  sectionTitle: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.md,
+    marginTop: SPACING.sm,
+  },
+
+  // Core Concept Card
+  coreCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
     padding: SPACING.lg,
-    borderRadius: RADIUS.md,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    marginBottom: SPACING.xl,
+  },
+  coreHeader: {
+    flexDirection: 'row',
+    marginBottom: SPACING.lg,
+  },
+  coreTitle: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+    marginBottom: 2,
+  },
+  coreDesc: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    lineHeight: 18,
+  },
+  progressRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: SPACING.sm,
+    gap: SPACING.lg,
+  },
+  progressText: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    marginTop: 6,
+  },
+  continueBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: SPACING.lg,
+    paddingVertical: 10,
+    borderRadius: RADIUS.full,
+  },
+  continueBtnText: {
+    ...FONTS.small,
+    color: COLORS.white,
+    fontWeight: '700',
+  },
+
+  // Practice Cards
+  practiceCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.md,
+    padding: SPACING.md,
+    marginBottom: SPACING.sm,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+  },
+  practiceIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: RADIUS.sm,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  practiceTitle: {
+    ...FONTS.bodyBold,
+    color: COLORS.textPrimary,
+  },
+  practiceSub: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    marginTop: 2,
+  },
+
+  // Mastery Tab
+  masteryCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    padding: SPACING.xl,
+    alignItems: 'center',
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    marginBottom: SPACING.xl,
+    marginTop: SPACING.md,
+  },
+  masteryLabel: {
+    ...FONTS.bodyBold,
+    color: COLORS.textMuted,
+    marginBottom: SPACING.sm,
+  },
+  masteryScore: {
+    fontSize: 48,
+    fontWeight: '800',
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.lg,
+  },
+  masterySub: {
+    ...FONTS.small,
+    color: COLORS.textMuted,
+    marginTop: SPACING.md,
+  },
+
+  primaryBtn: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: SPACING.lg,
+    borderRadius: RADIUS.md,
+    alignItems: 'center',
+  },
+  primaryBtnText: {
+    ...FONTS.bodyBold,
+    color: COLORS.white,
+  },
+
+  // Placeholder
+  placeholderCard: {
+    alignItems: 'center',
+    padding: SPACING.xxl,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.borderLight,
+    marginTop: SPACING.md,
+  },
+  placeholderTitle: {
+    ...FONTS.h3,
+    color: COLORS.textPrimary,
+    marginTop: SPACING.md,
+    marginBottom: SPACING.sm,
   },
   placeholderText: {
     ...FONTS.body,
     color: COLORS.textMuted,
-    flex: 1,
-  }
+    textAlign: 'center',
+  },
 });

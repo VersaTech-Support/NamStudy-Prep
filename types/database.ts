@@ -133,6 +133,7 @@ export type Database = {
           id: string
           name: string
           sequence_order: number | null
+          syllabus_url: string | null
         }
         Insert: {
           code?: string | null
@@ -144,6 +145,7 @@ export type Database = {
           id?: string
           name: string
           sequence_order?: number | null
+          syllabus_url?: string | null
         }
         Update: {
           code?: string | null
@@ -155,6 +157,7 @@ export type Database = {
           id?: string
           name?: string
           sequence_order?: number | null
+          syllabus_url?: string | null
         }
         Relationships: [
           {
@@ -242,6 +245,115 @@ export type Database = {
           },
         ]
       }
+      notification_events: {
+        Row: {
+          body: string
+          created_at: string
+          data: Json | null
+          dedupe_key: string
+          id: string
+          opened_at: string | null
+          sent_at: string | null
+          status: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          data?: Json | null
+          dedupe_key: string
+          id?: string
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          data?: Json | null
+          dedupe_key?: string
+          id?: string
+          opened_at?: string | null
+          sent_at?: string | null
+          status?: string
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_events_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_preferences: {
+        Row: {
+          achievement_notifications: boolean
+          content_notifications: boolean
+          exam_countdown_notifications: boolean
+          push_enabled: boolean
+          quiet_hours_enabled: boolean
+          quiet_hours_end: string | null
+          quiet_hours_start: string | null
+          streak_reminders: boolean
+          study_reminders: boolean
+          system_notifications: boolean
+          timezone: string | null
+          updated_at: string
+          user_id: string
+          weak_topic_reminders: boolean
+        }
+        Insert: {
+          achievement_notifications?: boolean
+          content_notifications?: boolean
+          exam_countdown_notifications?: boolean
+          push_enabled?: boolean
+          quiet_hours_enabled?: boolean
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          streak_reminders?: boolean
+          study_reminders?: boolean
+          system_notifications?: boolean
+          timezone?: string | null
+          updated_at?: string
+          user_id: string
+          weak_topic_reminders?: boolean
+        }
+        Update: {
+          achievement_notifications?: boolean
+          content_notifications?: boolean
+          exam_countdown_notifications?: boolean
+          push_enabled?: boolean
+          quiet_hours_enabled?: boolean
+          quiet_hours_end?: string | null
+          quiet_hours_start?: string | null
+          streak_reminders?: boolean
+          study_reminders?: boolean
+          system_notifications?: boolean
+          timezone?: string | null
+          updated_at?: string
+          user_id?: string
+          weak_topic_reminders?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       papers: {
         Row: {
           created_at: string | null
@@ -324,6 +436,50 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "payments_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_tokens: {
+        Row: {
+          created_at: string
+          device_id: string | null
+          expo_push_token: string
+          id: string
+          is_active: boolean
+          last_seen_at: string
+          platform: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          device_id?: string | null
+          expo_push_token: string
+          id?: string
+          is_active?: boolean
+          last_seen_at?: string
+          platform: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          device_id?: string | null
+          expo_push_token?: string
+          id?: string
+          is_active?: boolean
+          last_seen_at?: string
+          platform?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_tokens_user_id_fkey"
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"

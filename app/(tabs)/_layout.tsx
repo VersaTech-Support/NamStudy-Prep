@@ -17,15 +17,11 @@ export default function TabLayout() {
           backgroundColor: COLORS.white,
           borderTopWidth: 1,
           borderTopColor: COLORS.borderLight,
-          // Dynamically adjust height and padding to avoid the Android system nav bar
           height: (Platform.OS === 'ios' ? 88 : 65) + insets.bottom,
           paddingBottom: Platform.OS === 'ios' ? 28 : Math.max(insets.bottom, 8),
           paddingTop: 8,
           elevation: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -4 },
-          shadowOpacity: 0.1,
-          shadowRadius: 8,
+          boxShadow: '0px -4px 8px 0px rgba(0, 0, 0, 0.1)',
         },
         tabBarLabelStyle: {
           fontSize: 11,
@@ -33,6 +29,7 @@ export default function TabLayout() {
         },
       }}
     >
+      {/* ── PRIMARY TABS (visible in bottom bar) ─────────────────────── */}
       <Tabs.Screen
         name="index"
         options={{
@@ -43,20 +40,11 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="papers"
+        name="learn"
         options={{
-          title: 'Papers',
+          title: 'Learn',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="document-text" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="quizzes"
-        options={{
-          title: 'Quizzes',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="help-circle" size={size} color={color} />
+            <Ionicons name="book" size={size} color={color} />
           ),
         }}
       />
@@ -70,35 +58,6 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="flashcards"
-        options={{
-          title: 'Cards',
-          href: null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="albums" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="bookmarks"
-        options={{
-          title: 'Saved',
-          href: null,
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="bookmark" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="analytics"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="stats-chart" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="profile"
         options={{
           title: 'Profile',
@@ -107,6 +66,44 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* ── CONTEXTUAL ROUTES (hidden from tab bar, still navigable) ── */}
+      <Tabs.Screen
+        name="notes"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="papers"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="quizzes"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="flashcards"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="bookmarks"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="analytics"
+        options={{
+          href: null,
+        }}
+      />
     </Tabs>
   );
-}
+}

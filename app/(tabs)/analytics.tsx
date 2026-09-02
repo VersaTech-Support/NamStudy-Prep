@@ -13,6 +13,7 @@ import { useRouter } from 'expo-router';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
+import AuthModal from '@/components/AuthModal';
 
 import { getUserMastery } from '@/lib/learning/mastery';
 import { SubjectMastery, TopicMastery } from '@/lib/learning/types';
@@ -80,6 +81,7 @@ export default function AnalyticsScreen() {
   const [attempts, setAttempts] = useState<AttemptViewModel[]>([]);
   const [subjectStats, setSubjectStats] = useState<SubjectMastery[]>([]);
   const [overallAvg, setOverallAvg] = useState(0);
+  const [authVisible, setAuthVisible] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -131,8 +133,14 @@ export default function AnalyticsScreen() {
           <Text style={styles.headerTitle}>Progress</Text>
         </View>
         <View style={styles.centerContent}>
-          <Text style={styles.emptyText}>Please log in to view your analytics.</Text>
+          <Ionicons name="stats-chart-outline" size={64} color={COLORS.textMuted} />
+          <Text style={styles.emptyTitle}>Sign In to Track Progress</Text>
+          <Text style={styles.emptyText}>Create an account to view your quiz analytics and mastery data.</Text>
+          <TouchableOpacity style={styles.actionBtn} onPress={() => setAuthVisible(true)}>
+            <Text style={styles.actionBtnText}>Sign In</Text>
+          </TouchableOpacity>
         </View>
+        <AuthModal visible={authVisible} onClose={() => setAuthVisible(false)} />
       </View>
     );
   }
