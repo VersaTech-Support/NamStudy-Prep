@@ -1,128 +1,114 @@
 import React, { useState } from 'react';
 import { View, Text, Platform, StyleSheet } from 'react-native';
-import { COLORS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { COLORS, RADIUS, SPACING } from '@/constants/theme';
+import katex from 'katex';
+import { MathView } from '@dawsonxiong/react-native-latex-renderer';
+
+// Import KaTeX CSS only on Web
+if (Platform.OS === 'web') {
+  require('katex/dist/katex.min.css');
+}
 
 interface LaTeXRendererProps {
   latex: string;
-  displayMode?: boolean; // true = block equation, false = inline
+  displayMode?: boolean;
+  color?: string;
+  fontSize?: number;
 }
 
-/**
- * Cross-platform LaTeX renderer.
- * - Web: Uses KaTeX CDN in an iframe for proper math rendering.
- * - Native (Android/iOS): Falls back to monospace text display.
- */
-export default function LaTeXRenderer({ latex, displayMode = true }: LaTeXRendererProps) {
-  const [iframeHeight, setIframeHeight] = useState(60);
+export default function LaTeXRenderer({ latex, displayMode = true, color = COLORS.textPrimary, fontSize = 16 }: LaTeXRendererProps) {
+  const [hasError, setHasError] = useState(false);
 
-  if (Platform.OS !== 'web') {
-    // Native fallback: styled monospace text
+  // Normalization layer (handles basic escaping if needed, though usually untouched)
+  const normalizedLatex = latex.trim();
+
+  // If there's an error, gracefully fallback
+  if (hasError) {
     return (
-      <View style={styles.nativeBox}>
-        <Text style={styles.nativeText}>{latex}</Text>
+      <View style={styles.errorBox}>
+        <Text style={styles.errorText}>[Formula unavailable]</Text>
+        <Text style={styles.errorLatex}>{normalizedLatex}</Text>
       </View>
     );
   }
 
-  // Web: render KaTeX in an iframe for perfect isolation
-  const htmlContent = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.css">
-  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.11/dist/katex.min.js"></script>
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      min-height: 40px;
-      padding: 12px 16px;
-      background: transparent;
-      font-size: 18px;
-      overflow: hidden;
-    }
-    .katex-display { margin: 0 !important; }
-    .katex { font-size: 1.15em; }
-    .error { color: #EF4444; font-family: monospace; font-size: 13px; }
-  </style>
-</head>
-<body>
-  <div id="math"></div>
-  <script>
+  // --- Web Implementation ---
+  if (Platform.OS === 'web') {
     try {
-      katex.render(${JSON.stringify(latex)}, document.getElementById('math'), {
-        displayMode: ${displayMode},
-        throwOnError: false,
-        trust: true,
+      const html = katex.renderToString(normalizedLatex, {
+        displayMode,
+        throwOnError: true, // we catch it ourselves
+        trust: false, // safer for user content
       });
-    } catch (e) {
-      document.getElementById('math').innerHTML = '<span class="error">' + e.message + '</span>';
+
+      return (
+        <View style={displayMode ? styles.webDisplayContainer : styles.webInlineContainer}>
+          <div
+            style={{ color, fontSize: `${fontSize}px` }}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </View>
+      );
+    } catch (error) {
+      console.warn("KaTeX rendering error:", error);
+      return (
+        <View style={styles.errorBox}>
+          <Text style={styles.errorText}>[Formula unavailable]</Text>
+          <Text style={styles.errorLatex}>{normalizedLatex}</Text>
+        </View>
+      );
     }
-    // Send height back to parent
-    window.addEventListener('load', function() {
-      var h = document.body.scrollHeight;
-      window.parent.postMessage({ type: 'katex-height', height: h }, '*');
-    });
-  </script>
-</body>
-</html>`;
+  }
 
-  // Listen for height messages from iframe
-  React.useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'katex-height' && typeof e.data.height === 'number') {
-        setIframeHeight(Math.max(40, e.data.height + 4));
-      }
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []);
-
+  // --- Native Implementation ---
   return (
-    <View style={styles.webBox}>
-      <iframe
-        srcDoc={htmlContent}
-        style={{
-          width: '100%',
-          height: iframeHeight,
-          border: 'none',
-          overflow: 'hidden',
-          background: 'transparent',
-        } as any}
-        scrolling="no"
-        sandbox="allow-scripts"
-        title="LaTeX formula"
+    <View style={displayMode ? styles.nativeDisplayContainer : styles.nativeInlineContainer}>
+      <MathView
+        math={displayMode ? `$$${normalizedLatex}$$` : `$${normalizedLatex}$`}
+        color={color}
+        fontSize={fontSize}
+        onError={() => setHasError(true)}
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  webBox: {
-    backgroundColor: '#F8F9FA',
-    borderRadius: RADIUS.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
-    marginBottom: SPACING.md,
-    overflow: 'hidden',
-  },
-  nativeBox: {
-    backgroundColor: '#F8F9FA',
-    padding: SPACING.lg,
-    borderRadius: RADIUS.md,
+  webDisplayContainer: {
+    marginVertical: SPACING.md,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: SPACING.md,
-    borderWidth: 1,
-    borderColor: COLORS.borderLight,
+    width: '100%',
+    overflow: 'hidden',
   },
-  nativeText: {
+  webInlineContainer: {
+    display: 'flex',
+  },
+  nativeDisplayContainer: {
+    marginVertical: SPACING.md,
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '100%',
+  },
+  nativeInlineContainer: {
+  },
+  errorBox: {
+    backgroundColor: COLORS.surfaceAlt,
+    padding: SPACING.sm,
+    borderRadius: RADIUS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.red + '40',
+    marginVertical: SPACING.xs,
+  },
+  errorText: {
+    color: COLORS.red,
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginBottom: 4,
+  },
+  errorLatex: {
+    color: COLORS.textMuted,
     fontFamily: 'monospace',
-    fontSize: 16,
-    color: COLORS.textPrimary,
+    fontSize: 12,
   },
 });
