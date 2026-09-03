@@ -15,7 +15,11 @@
         "foregroundImage": "./assets/images/icon.png",
         "backgroundColor": "#581C87"
       },
-      "package": "com.versatech.namstudyprep"
+      "package": "com.versatech.namstudyprep",
+      "blockedPermissions": [
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO"
+      ]
     },
     "web": {
       "bundler": "metro",
