@@ -6,6 +6,8 @@ import { COLORS, SPACING, FONTS, RADIUS, SHADOWS } from '@/constants/theme';
 import { FEATURES } from '@/constants/features';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
+import { canAccessTopicContent } from '@/lib/accessControl';
+import UpgradeModal from '@/components/UpgradeModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import LoadingState from '@/components/ui/LoadingState';
 import EmptyState from '@/components/ui/EmptyState';
@@ -20,6 +22,7 @@ interface Topic {
   name: string;
   description: string | null;
   subject_id: string;
+  access_level?: string;
 }
 
 interface CurriculumSubject {
@@ -42,7 +45,7 @@ interface Curriculum {
 export default function TopicHubScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const { user } = useUser();
+  const { user, userTier } = useUser();
   const insets = useSafeAreaInsets();
   
   const [loading, setLoading] = useState(true);
@@ -57,6 +60,7 @@ export default function TopicHubScreen() {
   const [contentProgressPercent, setContentProgressPercent] = useState(0);
 
   const [activeTab, setActiveTab] = useState<'notes' | 'quiz' | 'papers'>('notes');
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   useEffect(() => {
     fetchTopicData();
@@ -138,6 +142,10 @@ export default function TopicHubScreen() {
     );
   }
 
+  // Check access — show locked view for VIP topics when user is FREE
+  const topicAccessLevel = (topic.access_level || 'VIP') as 'FREE' | 'VIP';
+  const hasAccess = canAccessTopicContent({ topicAccessLevel, userTier });
+
   return (
     <View style={styles.container}>
       {/* ─── Header ─────────────────────────────────────────────── */}
@@ -174,6 +182,34 @@ export default function TopicHubScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Locked VIP View */}
+      {!hasAccess ? (
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.lockedCard}>
+            <View style={styles.lockedIconWrapper}>
+              <Ionicons name="lock-closed" size={40} color={COLORS.goldDark} />
+            </View>
+            <Text style={styles.lockedTitle}>VIP Content</Text>
+            <Text style={styles.lockedDesc}>
+              This topic's notes, quizzes, and flashcards are available to VIP members.
+              Upgrade to unlock full access to all study materials.
+            </Text>
+            <TouchableOpacity
+              style={styles.upgradeBtn}
+              onPress={() => setShowUpgradeModal(true)}
+              activeOpacity={0.7}
+            >
+              <Ionicons name="diamond" size={18} color={COLORS.white} />
+              <Text style={styles.upgradeBtnText}>Upgrade to VIP</Text>
+            </TouchableOpacity>
+          </View>
+          <UpgradeModal
+            visible={showUpgradeModal}
+            onClose={() => setShowUpgradeModal(false)}
+          />
+        </ScrollView>
+      ) : (
 
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         
@@ -314,6 +350,7 @@ export default function TopicHubScreen() {
         )}
 
       </ScrollView>
+      )}
     </View>
   );
 }
@@ -527,5 +564,53 @@ const styles = StyleSheet.create({
     ...FONTS.body,
     color: COLORS.textMuted,
     textAlign: 'center',
+  },
+
+  // VIP Locked state
+  lockedCard: {
+    alignItems: 'center',
+    padding: SPACING.xxl,
+    backgroundColor: COLORS.white,
+    borderRadius: RADIUS.lg,
+    ...SHADOWS.sm,
+    borderWidth: 1,
+    borderColor: COLORS.goldLight,
+    marginTop: SPACING.md,
+  },
+  lockedIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.goldLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+  },
+  lockedTitle: {
+    ...FONTS.h2,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  lockedDesc: {
+    ...FONTS.body,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: SPACING.xl,
+  },
+  upgradeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.gold,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xxl,
+    borderRadius: RADIUS.md,
+    width: '100%',
+  },
+  upgradeBtnText: {
+    ...FONTS.bodyBold,
+    color: COLORS.white,
   },
 });

@@ -96,19 +96,35 @@ export default function PaperCard({ paper, canAccessSolutions, isBookmarked, onD
 
         {/* View Solution - Premium */}
         <TouchableOpacity
-          style={[styles.solutionBtn, canAccessSolutions && styles.solutionBtnUnlocked]}
-          onPress={() => onViewSolution(paper)}
-          activeOpacity={0.7}
+          style={[
+            styles.solutionBtn,
+            !paper.solution_pdf_url && styles.solutionBtnDisabled,
+            paper.solution_pdf_url && canAccessSolutions && styles.solutionBtnUnlocked
+          ]}
+          onPress={() => paper.solution_pdf_url ? onViewSolution(paper) : null}
+          activeOpacity={paper.solution_pdf_url ? 0.7 : 1}
+          disabled={!paper.solution_pdf_url}
         >
-          {!canAccessSolutions && (
-            <Ionicons name="lock-closed" size={14} color={COLORS.goldDark} />
+          {paper.solution_pdf_url ? (
+            <>
+              {!canAccessSolutions && (
+                <Ionicons name="lock-closed" size={14} color={COLORS.goldDark} />
+              )}
+              {canAccessSolutions && (
+                <Ionicons name="key" size={14} color={COLORS.white} />
+              )}
+              <Text style={[styles.solutionBtnText, canAccessSolutions && styles.solutionBtnTextUnlocked]}>
+                {canAccessSolutions ? 'View Solution' : 'Solution'}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="close-circle-outline" size={14} color={COLORS.textMuted} />
+              <Text style={[styles.solutionBtnText, { color: COLORS.textMuted }]}>
+                No Solution
+              </Text>
+            </>
           )}
-          {canAccessSolutions && (
-            <Ionicons name="key" size={14} color={COLORS.white} />
-          )}
-          <Text style={[styles.solutionBtnText, canAccessSolutions && styles.solutionBtnTextUnlocked]}>
-            {canAccessSolutions ? 'View Solution' : 'Solution'}
-          </Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -214,6 +230,10 @@ const styles = StyleSheet.create({
   solutionBtnUnlocked: {
     backgroundColor: COLORS.gold,
     borderColor: COLORS.gold,
+  },
+  solutionBtnDisabled: {
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.borderLight,
   },
   solutionBtnText: {
     ...FONTS.caption,

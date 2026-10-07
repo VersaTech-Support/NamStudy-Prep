@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import { Platform, View, ActivityIndicator } from 'react-native';
 import Purchases, { CustomerInfo } from 'react-native-purchases';
 import { supabase } from '@/lib/supabase';
+import { getUserTier, UserTier } from '@/lib/accessControl';
 
 const withTimeout = <T,>(
   promise: Promise<T>,
@@ -50,6 +51,7 @@ interface UserContextType {
   isPro: boolean | undefined;
   isAdmin: boolean;
   canAccessSolutions: boolean;
+  userTier: UserTier;
   loading: boolean;
   bookmarks: Bookmark[];
   streak: number;
@@ -109,17 +111,22 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  /**
-   * Sync RevenueCat subscription state to Supabase.
-   * Only writes to the database when the status actually differs.
-   * Only updates local React state after a successful DB write.
-   */
   const syncRevenueCatToSupabase = async (info: CustomerInfo, userId: string) => {
     try {
       const hasEntitlement = info.entitlements.active['NamibStudy Prep Pro'] !== undefined;
-      const targetStatus = hasEntitlement ? 'VIP' : 'FREE';
+      
+      // We only sync UPGRADES from RevenueCat to Supabase on the client side.
+      // If they don't have an entitlement, we DO NOT downgrade them to 'FREE' because 
+      // they might have paid manually via Bank Transfer (and have 'VIP' in Supabase).
+      // Downgrades should be handled securely by RevenueCat Webhooks.
+      if (!hasEntitlement) {
+        if (__DEV__) console.log('[RevenueCat → Supabase] No entitlement. Skipping sync to prevent overwriting manual VIP.');
+        return;
+      }
 
-      if (__DEV__) console.log('[RevenueCat → Supabase] Sync:', { hasEntitlement, targetStatus });
+      const targetStatus = 'VIP';
+
+      if (__DEV__) console.log('[RevenueCat → Supabase] Syncing active entitlement to Supabase:', { targetStatus });
 
       // Compare before writing — skip if already correct
       if (userRef.current?.subscription_status === targetStatus) {
@@ -694,34 +701,33 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+
+  const isAdmin = user?.is_admin === true || user?.role === 'admin';
+  const isSchoolAdmin = user?.is_school_admin === true;
+
+  const hasSupabasePro = user?.subscription_status === 'VIP' 
+    || user?.subscription_status === 'Pro' 
+    || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
+  
   const hasRevenueCatEntitlement = customerInfo?.entitlements.active['NamibStudy Prep Pro'] !== undefined;
-  const isRevenueCatPlatform = Platform.OS === 'android';
 
   let isPro: boolean | undefined = undefined;
   if (loading) {
     isPro = undefined;
-  } else if (isRevenueCatPlatform) {
-    // Android: RevenueCat is the sole subscription authority.
+  } else if (isAdmin || isSchoolAdmin) {
+    // Admins and School Admins should always show as Pro visually and functionally
+    isPro = true;
+  } else if (Platform.OS === 'android') {
+    // Android: RevenueCat is primary, BUT we must respect Supabase VIP status for Bank Transfers
     if (!revenueCatReady) {
-      // RevenueCat still initializing — do NOT fall back to stale Supabase data.
       isPro = undefined;
-    } else if (revenueCatError && customerInfo === null) {
-      // RevenueCat failed and we have no customer info — cannot determine status.
-      // UI should show error state (not infinite spinner).
-      isPro = false;
     } else {
-      // RevenueCat has resolved — use its entitlement as the single source of truth.
-      // Stale Supabase subscription_status cannot override this.
-      isPro = hasRevenueCatEntitlement;
+      isPro = hasRevenueCatEntitlement || hasSupabasePro;
     }
   } else {
-    // Web (or any platform where RevenueCat is unavailable by design) — Supabase fallback.
-    isPro = user?.subscription_status === 'VIP'
-      || user?.subscription_status === 'Pro'
-      || (user?.expiry_date ? new Date(user.expiry_date) > new Date() : false);
+    // Web (or iOS without RevenueCat) — Supabase fallback.
+    isPro = hasSupabasePro;
   }
-
-  const isAdmin = user?.is_admin === true || user?.role === 'admin';
 
   if (loading) {
     return (
@@ -731,11 +737,12 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
     );
   }
 
-  const isSchoolAdmin = user?.is_school_admin === true;
+
   const canAccessSolutions = isAdmin || isSchoolAdmin || isPro === true;
+  const userTier = getUserTier({ isPro, isAdmin: isAdmin || isSchoolAdmin });
 
   return (
-    <UserContext.Provider value={{ user, isPro, isAdmin, canAccessSolutions, loading, bookmarks, streak, onlineUsersCount, customerInfo, revenueCatReady, revenueCatError, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
+    <UserContext.Provider value={{ user, isPro, isAdmin, canAccessSolutions, userTier, loading, bookmarks, streak, onlineUsersCount, customerInfo, revenueCatReady, revenueCatError, login, signup, logout, refreshUser, updateProfile, updatePassword, toggleBookmark, isBookmarked: isBookmarkedFn, manageSubscriptions, refreshSubscription, uploadSchoolLogo }}>
       {children}
     </UserContext.Provider>
   );

@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
+import { AccessLevel, UserTier, shouldShowTopicLock } from '@/lib/accessControl';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -29,6 +30,7 @@ export interface TopicRow {
   hasQuiz: boolean;
   hasFlashcards: boolean;
   difficulty?: string | null;
+  accessLevel?: AccessLevel;
 }
 
 interface SectionCardProps {
@@ -46,6 +48,8 @@ interface SectionCardProps {
   defaultExpanded?: boolean;
   /** Section accent color (inherits from subject) */
   accentColor?: string;
+  /** Current user's tier (for showing lock/free badges) */
+  userTier?: UserTier;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -58,6 +62,7 @@ export default function SectionCard({
   onTopicPress,
   defaultExpanded = false,
   accentColor = COLORS.primary,
+  userTier = 'FREE',
 }: SectionCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const rotateAnim = useRef(new Animated.Value(defaultExpanded ? 1 : 0)).current;
@@ -156,6 +161,20 @@ export default function SectionCard({
                   </View>
                 </View>
               </View>
+
+              {/* Access Level Badge */}
+              {topic.accessLevel && (
+                shouldShowTopicLock({ topicAccessLevel: topic.accessLevel, userTier }) ? (
+                  <View style={styles.vipBadge}>
+                    <Ionicons name="lock-closed" size={10} color={COLORS.goldDark} />
+                    <Text style={styles.vipBadgeText}>VIP</Text>
+                  </View>
+                ) : topic.accessLevel === 'FREE' && userTier === 'FREE' ? (
+                  <View style={styles.freeBadge}>
+                    <Text style={styles.freeBadgeText}>FREE</Text>
+                  </View>
+                ) : null
+              )}
 
               <Ionicons name="chevron-forward" size={16} color={COLORS.textMuted} />
             </TouchableOpacity>
@@ -290,5 +309,36 @@ const styles = StyleSheet.create({
     ...FONTS.small,
     color: COLORS.textMuted,
     fontStyle: 'italic',
+  },
+
+  // Access level badges
+  vipBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: COLORS.goldLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: SPACING.sm,
+  },
+  vipBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.goldDark,
+    letterSpacing: 0.5,
+  },
+  freeBadge: {
+    backgroundColor: COLORS.greenLight,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    marginRight: SPACING.sm,
+  },
+  freeBadgeText: {
+    fontSize: 9,
+    fontWeight: '800',
+    color: COLORS.greenDark,
+    letterSpacing: 0.5,
   },
 });

@@ -1057,6 +1057,7 @@ export type Database = {
           sequence_order: number | null
           subject_id: string
           updated_at: string | null
+          access_level: string
         }
         Insert: {
           code?: string | null
@@ -1073,6 +1074,7 @@ export type Database = {
           sequence_order?: number | null
           subject_id: string
           updated_at?: string | null
+          access_level?: string
         }
         Update: {
           code?: string | null
@@ -1089,6 +1091,7 @@ export type Database = {
           sequence_order?: number | null
           subject_id?: string
           updated_at?: string | null
+          access_level?: string
         }
         Relationships: [
           {

@@ -78,6 +78,22 @@ export default function CurriculumTopicScreen() {
     }
   };
 
+  const saveTopicAccessLevel = async (level: string) => {
+    try {
+      setSaving(true);
+      const { error } = await supabase
+        .from('topics')
+        .update({ access_level: level })
+        .eq('id', id);
+      if (error) throw error;
+      setTopic(prev => prev ? { ...prev, access_level: level } : null);
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to update topic access level');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const addBlock = async (type: string) => {
     const newBlock = {
       topic_id: id,
@@ -211,6 +227,7 @@ export default function CurriculumTopicScreen() {
   }
 
   const isPublished = topic?.publication_status === 'published';
+  const isFree = topic?.access_level === 'FREE';
 
   return (
     <KeyboardAvoidingView 
@@ -236,11 +253,21 @@ export default function CurriculumTopicScreen() {
           </TouchableOpacity>
 
           <TouchableOpacity 
+            style={[styles.publishBtn, isFree ? styles.accessBtnFree : styles.accessBtnVip]}
+            onPress={() => saveTopicAccessLevel(isFree ? 'VIP' : 'FREE')}
+          >
+            <Ionicons name={isFree ? 'globe-outline' : 'lock-closed'} size={16} color={isFree ? COLORS.greenDark : COLORS.goldDark} />
+            <Text style={[styles.publishBtnText, { color: isFree ? COLORS.greenDark : COLORS.goldDark }]}>
+              {isFree ? 'FREE' : 'VIP'}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
             style={[styles.publishBtn, isPublished ? styles.publishBtnActive : styles.publishBtnDraft]}
             onPress={() => saveTopicStatus(isPublished ? 'draft' : 'published')}
           >
-            <Ionicons name={isPublished ? 'checkmark-circle' : 'document-text'} size={16} color={isPublished ? COLORS.greenDark : COLORS.goldDark} />
-            <Text style={[styles.publishBtnText, { color: isPublished ? COLORS.greenDark : COLORS.goldDark }]}>
+            <Ionicons name={isPublished ? 'checkmark-circle' : 'document-text'} size={16} color={isPublished ? COLORS.greenDark : COLORS.textSecondary} />
+            <Text style={[styles.publishBtnText, { color: isPublished ? COLORS.greenDark : COLORS.textSecondary }]}>
               {isPublished ? 'PUBLISHED' : 'DRAFT'}
             </Text>
           </TouchableOpacity>
@@ -389,12 +416,20 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   publishBtnDraft: {
-    backgroundColor: COLORS.goldLight,
-    borderColor: COLORS.gold + '40',
+    backgroundColor: COLORS.surfaceAlt,
+    borderColor: COLORS.borderLight,
   },
   publishBtnActive: {
     backgroundColor: COLORS.greenLight,
     borderColor: COLORS.green + '40',
+  },
+  accessBtnFree: {
+    backgroundColor: COLORS.greenLight,
+    borderColor: COLORS.green + '40',
+  },
+  accessBtnVip: {
+    backgroundColor: COLORS.goldLight,
+    borderColor: COLORS.gold + '40',
   },
   publishBtnText: {
     ...FONTS.small,

@@ -15,6 +15,8 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { COLORS, SHADOWS, RADIUS, SPACING, FONTS } from '@/constants/theme';
 import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
+import { canAccessTopicContent } from '@/lib/accessControl';
+import UpgradeModal from '@/components/UpgradeModal';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 // Centralized engines
@@ -25,7 +27,7 @@ import SectionCard, { TopicRow } from '@/components/ui/SectionCard';
 
 export default function StudentSubjectDashboard() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useUser();
+  const { user, userTier } = useUser();
   const router = useRouter();
   const insets = useSafeAreaInsets();
 
@@ -39,11 +41,15 @@ export default function StudentSubjectDashboard() {
   const [contentProgress, setContentProgress] = useState(0);
   const [topicContentMap, setTopicContentMap] = useState<Record<string, number>>({});
   const [studentSubjectRecord, setStudentSubjectRecord] = useState<any>(null);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
 
   // Content availability lookups
   const [topicHasNotes, setTopicHasNotes] = useState<Set<string>>(new Set());
   const [topicHasQuiz, setTopicHasQuiz] = useState<Set<string>>(new Set());
   const [topicHasFlashcards, setTopicHasFlashcards] = useState<Set<string>>(new Set());
+
+  // Map topic ID → access_level for gating
+  const [topicAccessLevels, setTopicAccessLevels] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (id && user) {
@@ -85,7 +91,7 @@ export default function StudentSubjectDashboard() {
         .select(`
           *,
           topics (
-            id, name, estimated_minutes, publication_status, sequence_order, difficulty, icon
+            id, name, estimated_minutes, publication_status, sequence_order, difficulty, icon, access_level
           )
         `)
         .eq('subject_id', id)
@@ -100,6 +106,15 @@ export default function StudentSubjectDashboard() {
           .sort((a: any, b: any) => a.sequence_order - b.sequence_order);
         return { ...sec, topics: publishedTopics };
       });
+
+      // Build access level lookup
+      const alMap: Record<string, string> = {};
+      for (const sec of processedSections) {
+        for (const t of sec.topics) {
+          alMap[t.id] = t.access_level || 'VIP';
+        }
+      }
+      setTopicAccessLevels(alMap);
 
       setSections(processedSections);
     } catch (err) {
@@ -395,6 +410,7 @@ export default function StudentSubjectDashboard() {
                 hasQuiz: topicHasQuiz.has(topic.id),
                 hasFlashcards: topicHasFlashcards.has(topic.id),
                 difficulty: topic.difficulty,
+                accessLevel: (topic.access_level || 'VIP') as 'FREE' | 'VIP',
               }));
 
               const sectionCompleted = topicRows.filter(
@@ -408,9 +424,17 @@ export default function StudentSubjectDashboard() {
                   description={section.description}
                   topics={topicRows}
                   completedCount={sectionCompleted}
-                  onTopicPress={(topicId) => router.push(`/topic/${topicId}` as any)}
+                  onTopicPress={(topicId) => {
+                    const al = (topicAccessLevels[topicId] || 'VIP') as 'FREE' | 'VIP';
+                    if (!canAccessTopicContent({ topicAccessLevel: al, userTier })) {
+                      setShowUpgradeModal(true);
+                      return;
+                    }
+                    router.push(`/topic/${topicId}` as any);
+                  }}
                   defaultExpanded={idx === 0}
                   accentColor={accentColor}
+                  userTier={userTier}
                 />
               );
             })}
@@ -419,6 +443,11 @@ export default function StudentSubjectDashboard() {
 
         <View style={{ height: 60 }} />
       </ScrollView>
+
+      <UpgradeModal
+        visible={showUpgradeModal}
+        onClose={() => setShowUpgradeModal(false)}
+      />
     </View>
   );
 }

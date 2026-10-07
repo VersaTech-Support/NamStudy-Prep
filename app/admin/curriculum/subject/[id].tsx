@@ -188,6 +188,7 @@ export default function CurriculumSubjectScreen() {
           section_id: sectionId,
           name: topicName,
           publication_status: 'draft',
+          access_level: 'VIP',
           sequence_order: sections[sectionIndex].topics.length
         });
       if (error) throw error;
@@ -427,6 +428,11 @@ export default function CurriculumSubjectScreen() {
                             <View style={[styles.statusBadge, { backgroundColor: getStatusColor(topic.publication_status) + '20' }]}>
                               <Text style={[styles.statusText, { color: getStatusColor(topic.publication_status) }]}>
                                 {(topic.publication_status || 'draft').toUpperCase()}
+                              </Text>
+                            </View>
+                            <View style={[styles.statusBadge, { backgroundColor: topic.access_level === 'FREE' ? COLORS.greenLight : COLORS.goldLight }]}>
+                              <Text style={[styles.statusText, { color: topic.access_level === 'FREE' ? COLORS.greenDark : COLORS.goldDark }]}>
+                                {topic.access_level === 'FREE' ? 'FREE' : 'VIP'}
                               </Text>
                             </View>
                             <Text style={styles.topicTime}>{topic.estimated_minutes || 0} mins</Text>

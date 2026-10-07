@@ -16,16 +16,20 @@ import { supabase } from '@/lib/supabase';
 import { useUser } from '@/context/UserContext';
 import BlockRenderer from '@/components/admin/curriculum/BlockRenderer';
 import ConfidenceCheck from '@/components/ConfidenceCheck';
+import { canAccessTopicContent } from '@/lib/accessControl';
+import UpgradeModal from '@/components/UpgradeModal';
 
 export default function StudentNotesReader() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { user } = useUser();
+  const { user, userTier } = useUser();
   const router = useRouter();
 
   const [topic, setTopic] = useState<any>(null);
   const [contentBlocks, setContentBlocks] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [hasAccess, setHasAccess] = useState(true);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [confidenceDone, setConfidenceDone] = useState(false);
 
   // Progress tracking
@@ -64,6 +68,14 @@ export default function StudentNotesReader() {
         return;
       }
       setTopic(topicData);
+
+      const topicAccessLevel = (topicData.access_level || 'VIP') as 'FREE' | 'VIP';
+      const userHasAccess = canAccessTopicContent({ topicAccessLevel, userTier });
+      setHasAccess(userHasAccess);
+
+      if (!userHasAccess) {
+        return;
+      }
 
       // 2. Fetch Content (MUST BE PUBLISHED)
       const { data: contentData, error: contentError } = await supabase
@@ -179,6 +191,39 @@ export default function StudentNotesReader() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color={COLORS.primary} />
+      </View>
+    );
+  }
+
+  if (!hasAccess && topic) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color={COLORS.textPrimary} />
+          </TouchableOpacity>
+        </View>
+        <View style={styles.center}>
+          <View style={styles.lockedIconWrapper}>
+            <Ionicons name="lock-closed" size={40} color={COLORS.goldDark} />
+          </View>
+          <Text style={styles.lockedTitle}>VIP Notes Locked</Text>
+          <Text style={styles.lockedDesc}>
+            Upgrade to VIP to access the detailed notes, examples, and study materials for this topic.
+          </Text>
+          <TouchableOpacity
+            style={styles.upgradeBtn}
+            onPress={() => setShowUpgradeModal(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="diamond" size={18} color={COLORS.white} />
+            <Text style={styles.upgradeBtnText}>Upgrade to VIP</Text>
+          </TouchableOpacity>
+        </View>
+        <UpgradeModal
+          visible={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
+        />
       </View>
     );
   }
@@ -414,5 +459,45 @@ const styles = StyleSheet.create({
   quizCtaSubtitle: {
     ...FONTS.small,
     color: 'rgba(255,255,255,0.8)',
+  },
+
+  // VIP Locked state
+  lockedIconWrapper: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: COLORS.goldLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: SPACING.lg,
+  },
+  lockedTitle: {
+    ...FONTS.h2,
+    color: COLORS.textPrimary,
+    marginBottom: SPACING.sm,
+  },
+  lockedDesc: {
+    ...FONTS.body,
+    color: COLORS.textMuted,
+    textAlign: 'center',
+    lineHeight: 22,
+    marginBottom: SPACING.xl,
+    paddingHorizontal: SPACING.lg,
+  },
+  upgradeBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: SPACING.sm,
+    backgroundColor: COLORS.gold,
+    paddingVertical: SPACING.lg,
+    paddingHorizontal: SPACING.xxl,
+    borderRadius: RADIUS.md,
+    width: '100%',
+    maxWidth: 300,
+  },
+  upgradeBtnText: {
+    ...FONTS.bodyBold,
+    color: COLORS.white,
   },
 });
